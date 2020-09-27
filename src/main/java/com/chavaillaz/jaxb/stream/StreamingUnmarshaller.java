@@ -42,7 +42,7 @@ import static javax.xml.stream.XMLStreamConstants.*;
  * </pre>
  * or with the {@link #iterate(BiConsumer)} method:
  * <pre>
- *     unmarshaller.iterate((type, element) -> doSomething(element));
+ *     unmarshaller.iterate((type, element) -&gt; doSomething(element));
  * </pre>
  * Don't forget to open the stream before trying to read in it.
  */

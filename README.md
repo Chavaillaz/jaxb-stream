@@ -14,7 +14,7 @@ The dependency is available in maven central:
 <dependency>
     <groupId>com.chavaillaz</groupId>
     <artifactId>jaxb-stream</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 </dependency>
 ```
 

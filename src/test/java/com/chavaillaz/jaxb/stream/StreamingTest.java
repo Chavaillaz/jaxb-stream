@@ -1,11 +1,13 @@
 package com.chavaillaz.jaxb.stream;
 
 import com.chavaillaz.jaxb.stream.metric.*;
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 
+import javax.xml.bind.JAXBException;
+import javax.xml.stream.XMLStreamException;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,31 +30,33 @@ public class StreamingTest {
         assertThat(readMetrics).isEqualTo(writtenMetrics);
     }
 
-    @SneakyThrows
-    public List<Metric> writeMetrics(String fileName) {
+    private List<Metric> writeMetrics(String fileName) {
         List<Metric> metrics = new ArrayList<>();
         try (StreamingMarshaller marshaller = new StreamingMarshaller(MetricsList.class)) {
             marshaller.open(new FileOutputStream(fileName));
             writeMetrics(marshaller, metrics, DiskMetric.class, getMetricsAllDisks());
             writeMetrics(marshaller, metrics, MemoryMetric.class, new MemoryMetric());
             writeMetrics(marshaller, metrics, ProcessorMetric.class, new ProcessorMetric());
+        } catch (XMLStreamException | JAXBException | IOException e) {
+            throw new RuntimeException(e);
         }
         return metrics;
     }
 
-    public <T extends Metric> void writeMetrics(StreamingMarshaller marshaller, List<Metric> list, Class<T> type, T... metrics) {
+    private <T extends Metric> void writeMetrics(StreamingMarshaller marshaller, List<Metric> list, Class<T> type, T... metrics) throws JAXBException {
         for (T metric : metrics) {
             marshaller.write(type, metric);
             list.add(metric);
         }
     }
 
-    @SneakyThrows
-    public List<Metric> readMetrics(String fileName, Class<?>... types) {
+    private List<Metric> readMetrics(String fileName, Class<?>... types) {
         List<Metric> metrics = new ArrayList<>();
         try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(types)) {
             unmarshaller.open(new FileInputStream(fileName));
             unmarshaller.iterate((type, element) -> metrics.add((Metric) element));
+        } catch (XMLStreamException | JAXBException | IOException e) {
+            throw new RuntimeException(e);
         }
         return metrics;
     }

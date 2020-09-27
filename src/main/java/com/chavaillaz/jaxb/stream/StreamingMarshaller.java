@@ -2,14 +2,16 @@ package com.chavaillaz.jaxb.stream;
 
 import com.sun.xml.txw2.output.IndentingXMLStreamWriter;
 import lombok.NonNull;
-import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBElement;
+import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
 import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.Closeable;
 import java.io.OutputStream;
@@ -39,12 +41,12 @@ import static javax.xml.bind.Marshaller.JAXB_FRAGMENT;
  * </pre>
  * Don't forget to open the stream before trying to write in it.
  */
+@Slf4j
 public class StreamingMarshaller implements Closeable {
 
     private final Map<Class<?>, Marshaller> marshallerCache;
     private final String rootElement;
-    private XMLStreamWriter xmlOut;
-    private boolean isOpen;
+    private XMLStreamWriter xmlWriter;
 
     /**
      * Creates a new streaming marshaller writing elements in the given root element class.
@@ -56,7 +58,6 @@ public class StreamingMarshaller implements Closeable {
     public StreamingMarshaller(@NonNull Class<?> type) {
         marshallerCache = new HashMap<>();
         rootElement = getAnnotation(type, XmlRootElement.class).name();
-        isOpen = false;
     }
 
     protected static <A extends Annotation> A getAnnotation(Class<?> type, Class<A> annotationType) {
@@ -70,18 +71,19 @@ public class StreamingMarshaller implements Closeable {
     /**
      * Opens the given output stream in the XML file has to be written.
      * It creates the beginning of the document with XML definition and the root element.
+     * If an output stream is already open, it closes it before opening the new one.
      *
      * @param outputStream The output stream in which write the XML elements
-     * @throws RuntimeException if an error was encountered while starting the XML document with the root element
+     * @throws XMLStreamException if an error was encountered while starting the XML document with the root element
      */
-    @SneakyThrows
-    public synchronized void open(OutputStream outputStream) {
-        if (!isOpen) {
-            xmlOut = new IndentingXMLStreamWriter(XMLOutputFactory.newFactory().createXMLStreamWriter(outputStream));
-            xmlOut.writeStartDocument();
-            xmlOut.writeStartElement(rootElement);
-            isOpen = true;
+    public synchronized void open(OutputStream outputStream) throws XMLStreamException {
+        if (xmlWriter != null) {
+            close();
         }
+
+        xmlWriter = new IndentingXMLStreamWriter(XMLOutputFactory.newFactory().createXMLStreamWriter(outputStream));
+        xmlWriter.writeStartDocument();
+        xmlWriter.writeStartElement(rootElement);
     }
 
     /**
@@ -90,14 +92,13 @@ public class StreamingMarshaller implements Closeable {
      * @param type   The type of the given {@code object}
      * @param object The element to marshal and write
      * @param <T>    The element type
-     * @throws RuntimeException if an error was encountered while marshalling the given object
+     * @throws JAXBException if an error was encountered while marshalling the given object
      */
-    @SneakyThrows
-    public synchronized <T> void write(Class<T> type, T object) {
+    public synchronized <T> void write(Class<T> type, T object) throws JAXBException {
         XmlRootElement annotation = getAnnotation(type, XmlRootElement.class);
         String objectName = annotation.name();
         JAXBElement<T> element = new JAXBElement<>(QName.valueOf(objectName), type, object);
-        getMarshaller(type).marshal(element, xmlOut);
+        getMarshaller(type).marshal(element, xmlWriter);
     }
 
     /**
@@ -106,10 +107,15 @@ public class StreamingMarshaller implements Closeable {
      * @param type The type of elements the marshaller has to handle
      * @param <T>  The element type
      * @return The marshaller handling the conversion of the given element type
-     * @throws RuntimeException if an error was encountered while creating the marshaller
+     * @throws JAXBException if an error was encountered while creating the marshaller
      */
-    public <T> Marshaller getMarshaller(Class<T> type) {
-        return marshallerCache.computeIfAbsent(type, this::createMarshaller);
+    public <T> Marshaller getMarshaller(Class<T> type) throws JAXBException {
+        Marshaller marshaller = marshallerCache.get(type);
+        if (marshaller == null) {
+            marshaller = createMarshaller(type);
+            marshallerCache.put(type, marshaller);
+        }
+        return marshaller;
     }
 
     /**
@@ -117,10 +123,9 @@ public class StreamingMarshaller implements Closeable {
      *
      * @param type The type of elements the marshaller has to handle
      * @return The marshaller created, capable of handling the conversion of the given element type
-     * @throws RuntimeException if an error was encountered while creating the marshaller
+     * @throws JAXBException if an error was encountered while creating the marshaller
      */
-    @SneakyThrows
-    public Marshaller createMarshaller(Class<?> type) {
+    public Marshaller createMarshaller(Class<?> type) throws JAXBException {
         JAXBContext context = JAXBContext.newInstance(type);
         Marshaller marshaller = context.createMarshaller();
         marshaller.setProperty(JAXB_FRAGMENT, TRUE);
@@ -129,16 +134,18 @@ public class StreamingMarshaller implements Closeable {
 
     /**
      * Writes the closing tag and closes the stream.
-     *
-     * @throws RuntimeException if an error occur while writing the document end or while closing the stream
      */
     @Override
-    @SneakyThrows
     public synchronized void close() {
-        if (isOpen) {
-            xmlOut.writeEndDocument();
-            xmlOut.close();
-            isOpen = false;
+        try {
+            if (xmlWriter != null) {
+                xmlWriter.writeEndDocument();
+                xmlWriter.close();
+            }
+        } catch (XMLStreamException e) {
+            log.error("Unable to close XML stream writer", e);
+        } finally {
+            xmlWriter = null;
         }
     }
 

@@ -3,7 +3,7 @@
 export GPG_TTY=$(tty)
 mvn versions:set -DnewVersion=${newVersion} -DgenerateBackupPoms=false
 mvn clean deploy -Prelease
-git add pom.xml
+git add .
 git commit -m "Release ${newVersion}"
 git tag ${newVersion}
 git push --tags

@@ -9,12 +9,11 @@ This library allows you to read and write a list of elements
 The goal is to avoid loading a huge amount of data into memory when processing large files.
 
 ## Installation
-The dependency is available in maven central:
+The dependency is available in maven central (see badge for version):
 ```xml
 <dependency>
     <groupId>com.chavaillaz</groupId>
     <artifactId>jaxb-stream</artifactId>
-    <version>1.0.0</version>
 </dependency>
 ```
 

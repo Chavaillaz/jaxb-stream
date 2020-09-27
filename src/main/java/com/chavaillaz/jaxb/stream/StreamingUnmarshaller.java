@@ -42,7 +42,7 @@ import static javax.xml.stream.XMLStreamConstants.*;
  * </pre>
  * or with the {@link #iterate(BiConsumer)} method:
  * <pre>
- *     unmarshaller.iterate((type, element) -> doSomething(element));
+ *     unmarshaller.iterate((type, element) -&gt; doSomething(element));
  * </pre>
  * Don't forget to open the stream before trying to read in it.
  */
@@ -125,8 +125,13 @@ public class StreamingUnmarshaller implements Closeable {
      * Gets the type of the next element in the stream.
      *
      * @return The next type or {@code null} when not found (in that case, add that type at class instantiation)
+     * @throws XMLStreamException if an error was encountered while detecting the next state
      */
-    public Class<?> getNextType() {
+    public Class<?> getNextType() throws XMLStreamException {
+        if (!hasNext()) {
+            throw new XMLStreamException("There is no more element to read");
+        }
+
         return mapType.get(xmlReader.getName().toString());
     }
 
@@ -141,10 +146,6 @@ public class StreamingUnmarshaller implements Closeable {
      * @throws JAXBException      if an error was encountered while unmarshalling the element
      */
     public synchronized <T> T next(Class<T> type) throws JAXBException, XMLStreamException {
-        if (!hasNext()) {
-            throw new XMLStreamException("There is no more element to read");
-        }
-
         Class<?> nextType = getNextType();
         if (type == null || !type.equals(nextType)) {
             throw new JAXBException("Mismatch between next type " + nextType + " and given type " + type);

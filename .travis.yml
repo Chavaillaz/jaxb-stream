@@ -9,7 +9,7 @@ addons:
 jdk:
   - openjdk11
 script:
-  - sonar-scanner
+  - mvn clean verify sonar:sonar -Pcoverage
 cache:
   directories:
     - '$HOME/.m2/repository'

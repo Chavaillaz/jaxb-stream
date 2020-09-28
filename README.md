@@ -35,6 +35,29 @@ Each metric defines an XML element by using the annotation `@XmlRootElement`.
 Those metrics would usually be stored in the container `MetricsList`, representing a list of metrics (container).
 This list also defines an XML element, in that case `metrics`, the XML tag for that container.
 
+Below a file example from that example:
+```xml
+<?xml version="1.0" ?>
+<metrics>
+  <disk>
+    <disk>/</disk>
+    <freePartitionSpace>688865050624</freePartitionSpace>
+    <usablePartitionSpace>544384016384</usablePartitionSpace>
+    <totalCapacity>700001001472</totalCapacity>
+  </disk>
+  <memory>
+    <freeMemory>521889952</freeMemory>
+    <maxMemory>8589934592</maxMemory>
+    <totalMemory>536870912</totalMemory>
+  </memory>
+  <processor>
+    <systemLoad>0.25</systemLoad>
+    <processLoad>0.18</processLoad>
+    <availableProcessors>16</availableProcessors>
+  </processor>
+  ...
+</metrics>
+```
 ### Writing elements
 For example, to write two metrics (memory and processor metrics), the following code can be used:
 ```java

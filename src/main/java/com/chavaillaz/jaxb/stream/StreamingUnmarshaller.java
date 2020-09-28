@@ -54,7 +54,7 @@ public class StreamingUnmarshaller implements Closeable {
     private XMLStreamReader xmlReader;
 
     /**
-     * Creates a new streaming unmarshaller reading elements from the given types
+     * Creates a new streaming unmarshaller reading elements from the given types.
      * Please note that the given classes need the {@link XmlRootElement} annotation.
      *
      * @param types The list of element types that will be read by the unmarshaller

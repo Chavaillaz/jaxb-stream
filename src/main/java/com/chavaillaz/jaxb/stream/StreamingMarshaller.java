@@ -44,7 +44,7 @@ import static javax.xml.bind.Marshaller.JAXB_FRAGMENT;
 @Slf4j
 public class StreamingMarshaller implements Closeable {
 
-    private final Map<Class<?>, Marshaller> marshallerCache;
+    private final Map<Class<?>, Marshaller> marshallerCache = new HashMap<>();
     private final String rootElement;
     private XMLStreamWriter xmlWriter;
 
@@ -56,8 +56,16 @@ public class StreamingMarshaller implements Closeable {
      * @throws IllegalArgumentException if the {@link XmlRootElement} annotation is missing for the given type
      */
     public StreamingMarshaller(@NonNull Class<?> type) {
-        marshallerCache = new HashMap<>();
-        rootElement = getAnnotation(type, XmlRootElement.class).name();
+        this.rootElement = getAnnotation(type, XmlRootElement.class).name();
+    }
+
+    /**
+     * Creates a new streaming marshaller writing elements in the given root element.
+     *
+     * @param rootElement The root used as XML container where to store the elements to write
+     */
+    public StreamingMarshaller(@NonNull String rootElement) {
+        this.rootElement = rootElement;
     }
 
     protected static <A extends Annotation> A getAnnotation(Class<?> type, Class<A> annotationType) {

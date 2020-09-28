@@ -58,7 +58,8 @@ public class StreamingTest {
 
     @Test
     public void testNullTypeAtInstantiation() {
-        assertThrows(NullPointerException.class, () -> new StreamingMarshaller(null));
+        assertThrows(NullPointerException.class, () -> new StreamingMarshaller((Class<?>) null));
+        assertThrows(NullPointerException.class, () -> new StreamingMarshaller((String) null));
     }
 
     @Test
@@ -90,7 +91,7 @@ public class StreamingTest {
 
     private List<Metric> writeMetrics(String fileName) {
         List<Metric> metrics = new ArrayList<>();
-        try (StreamingMarshaller marshaller = new StreamingMarshaller(MetricsList.class)) {
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
             marshaller.open(new FileOutputStream(fileName));
             writeMetrics(marshaller, metrics, DiskMetric.class, getMetricsAllDisks());
             writeMetrics(marshaller, metrics, MemoryMetric.class, new MemoryMetric());

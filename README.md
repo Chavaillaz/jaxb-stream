@@ -35,7 +35,7 @@ Each metric defines an XML element by using the annotation `@XmlRootElement`.
 Those metrics would usually be stored in the container `MetricsList`, representing a list of metrics (container).
 This list also defines an XML element, in that case `metrics`, the XML tag for that container.
 
-Below a file example from that example:
+Below a XML file from that example:
 ```xml
 <?xml version="1.0" ?>
 <metrics>

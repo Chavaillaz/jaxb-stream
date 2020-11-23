@@ -18,8 +18,8 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 
 import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getAnnotation;
-import static javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD;
-import static javax.xml.XMLConstants.ACCESS_EXTERNAL_SCHEMA;
+import static javax.xml.stream.XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES;
+import static javax.xml.stream.XMLInputFactory.SUPPORT_DTD;
 import static javax.xml.stream.XMLStreamConstants.*;
 
 /**
@@ -87,8 +87,8 @@ public class StreamingUnmarshaller implements Closeable {
 
         XMLInputFactory factory = XMLInputFactory.newInstance();
         // Deny all access to external references
-        factory.setProperty(ACCESS_EXTERNAL_DTD, "");
-        factory.setProperty(ACCESS_EXTERNAL_SCHEMA, "");
+        factory.setProperty(IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        factory.setProperty(SUPPORT_DTD, false);
         xmlReader = factory.createXMLStreamReader(inputStream);
 
         // Ignore headers

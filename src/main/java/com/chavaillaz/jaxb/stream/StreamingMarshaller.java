@@ -1,14 +1,14 @@
 package com.chavaillaz.jaxb.stream;
 
 import com.sun.xml.txw2.output.IndentingXMLStreamWriter;
+import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBElement;
+import jakarta.xml.bind.JAXBException;
+import jakarta.xml.bind.Marshaller;
+import jakarta.xml.bind.annotation.XmlRootElement;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBElement;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
@@ -19,8 +19,8 @@ import java.lang.annotation.Annotation;
 import java.util.HashMap;
 import java.util.Map;
 
+import static jakarta.xml.bind.Marshaller.JAXB_FRAGMENT;
 import static java.lang.Boolean.TRUE;
-import static javax.xml.bind.Marshaller.JAXB_FRAGMENT;
 
 /**
  * JAXB marshaller using streaming to write XML into the given output stream.

@@ -1,15 +1,14 @@
 package com.chavaillaz.jaxb.stream.metric;
 
 import com.sun.management.OperatingSystemMXBean;
+import jakarta.xml.bind.annotation.XmlAccessorType;
+import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlRootElement;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
-import javax.xml.bind.annotation.XmlAccessorType;
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
-
+import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
 import static java.lang.management.ManagementFactory.getOperatingSystemMXBean;
-import static javax.xml.bind.annotation.XmlAccessType.FIELD;
 
 @Data
 @AllArgsConstructor

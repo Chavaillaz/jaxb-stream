@@ -1,9 +1,9 @@
 package com.chavaillaz.jaxb.stream;
 
 import com.chavaillaz.jaxb.stream.metric.*;
+import jakarta.xml.bind.JAXBException;
 import org.junit.jupiter.api.Test;
 
-import javax.xml.bind.JAXBException;
 import javax.xml.stream.XMLStreamException;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;

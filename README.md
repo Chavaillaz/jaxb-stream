@@ -5,16 +5,15 @@
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.chavaillaz/jaxb-stream/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.chavaillaz/jaxb-stream)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-This library allows you to read and write a list of elements
-(even from different types, but with the same parent) item by item from and to an XML file. The goal is to avoid loading
-a huge amount of data into memory when processing large files.
+This library allows you to read and write a list of elements (even from different types, but with the same parent) 
+item by item from and to an XML file. The goal is to avoid loading a huge amount of data into memory when processing 
+large files.
 
 ## Installation
 
 The dependency is available in maven central (see badge for version):
 
 ```xml
-
 <dependency>
     <groupId>com.chavaillaz</groupId>
     <artifactId>jaxb-stream</artifactId>
@@ -73,36 +72,36 @@ Below an XML file from that example:
 For example, to write two metrics (memory and processor metrics), the following code can be used:
 
 ```java
-try(StreamingMarshaller marshaller=new StreamingMarshaller(MetricsList.class)){
-        marshaller.open(new FileOutputStream(fileName));
-        marshaller.write(MemoryMetric.class,new MemoryMetric());
-        marshaller.write(ProcessorMetric.class,new ProcessorMetric());
-        ...
-        }
+try (StreamingMarshaller marshaller = new StreamingMarshaller(MetricsList.class)) {
+    marshaller.open(new FileOutputStream(fileName));
+    marshaller.write(MemoryMetric.class, new MemoryMetric());
+    marshaller.write(ProcessorMetric.class, new ProcessorMetric());
+    ...
+}
 ```
 
-Note that you can also give the root element tag name instead of giving the ```MetricsList.class```.
+Note that you can also give the root element tag name instead of giving ```MetricsList.class```.
 
 ### Reading elements
 
 For example, to read the written metrics (memory and processor metrics), the following code can be used:
 
 ```java
-try(StreamingUnmarshaller unmarshaller=new StreamingUnmarshaller(MemoryMetric.class,ProcessorMetric.class)){
-        unmarshaller.open(new FileInputStream(fileName));
-        unmarshaller.iterate((type,element)->doWhatYouWant(element));
-        }
+try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class, ProcessorMetric.class)) {
+    unmarshaller.open(new FileInputStream(fileName));
+    unmarshaller.iterate((type, element) -> doWhatYouWant(element));
+}
 ```
 
 or by iterating over each element by yourself:
 
 ```java
-try(StreamingUnmarshaller unmarshaller=new StreamingUnmarshaller(MemoryMetric.class,ProcessorMetric.class)){
-        unmarshaller.open(new FileInputStream(fileName));
-        while(unmarshaller.hasNext()){
+try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class, ProcessorMetric.class)) {
+    unmarshaller.open(new FileInputStream(fileName));
+    while (unmarshaller.hasNext()) {
         doWhatYouWant(unmarshaller.next(YourObject.class));
-        }
-        }
+    }
+}
 ```
 
 Note that if the classes given to the `StreamingUnmarshaller` do not have the `XmlRootElement` annotation
@@ -110,11 +109,11 @@ Note that if the classes given to the `StreamingUnmarshaller` do not have the `X
 
 ### Complex XML file structure
 
-If the XML file you would like to create or read has a complex structure
-(meaning the stream of elements to read is not present right after the root tag), you have the possibility to extends
-both marshaller and unmarshaller and override the following methods:
+If the XML file you would like to create or read has a complex structure (meaning the stream of elements to read 
+is not present right after the root tag), you have the possibility to extends both marshaller and unmarshaller and 
+override the following methods:
 
-- `createDocumentStart` in `StreamingMarshaller` to write the beginning of the XML file before the stream of elements
+- `createDocumentStart` in `StreamingMarshaller` to write the start of the XML file before the stream of elements
 - `close` in `StreamingMarshaller` to write the end of the XML file (note that tags are closed automatically)
 - `skipDocumentStart` in `StreamingUnmarshaller` to reach the stream of elements in the document
 

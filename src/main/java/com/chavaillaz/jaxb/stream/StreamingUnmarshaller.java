@@ -116,7 +116,19 @@ public class StreamingUnmarshaller implements Closeable {
         factory.setProperty(IS_SUPPORTING_EXTERNAL_ENTITIES, false);
         factory.setProperty(SUPPORT_DTD, false);
         xmlReader = factory.createXMLStreamReader(inputStream);
+        skipDocumentStart(skipDepth);
+    }
 
+    /**
+     * Skip the elements at the start of the document to reach the list to browse.
+     * Override this method if you have a complex structure in the XML file before reaching the elements list.
+     * Note that the parameter {@code skipDepth} may become irrelevant when reimplementing it depending on the
+     * file structure complexity.
+     *
+     * @param skipDepth The number of containers to skip before reaching the stream of desired elements
+     * @throws XMLStreamException if an error was encountered while skipping tags
+     */
+    protected void skipDocumentStart(int skipDepth) throws XMLStreamException {
         // Ignore headers
         skipElements(START_DOCUMENT, DTD);
 
@@ -129,6 +141,12 @@ public class StreamingUnmarshaller implements Closeable {
         skipElements(END_ELEMENT);
     }
 
+    /**
+     * Skips the given event types.
+     *
+     * @param elements The event types to ignore
+     * @throws XMLStreamException if an error was encountered while skipping the elements
+     */
     protected void skipElements(Integer... elements) throws XMLStreamException {
         int eventType = xmlReader.getEventType();
 

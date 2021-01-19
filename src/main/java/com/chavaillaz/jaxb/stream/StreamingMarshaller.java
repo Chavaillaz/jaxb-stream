@@ -91,6 +91,16 @@ public class StreamingMarshaller implements Closeable {
         }
 
         xmlWriter = new IndentingXMLStreamWriter(XMLOutputFactory.newFactory().createXMLStreamWriter(outputStream));
+        createDocumentStart();
+    }
+
+    /**
+     * Creates the beginning of the document (until we reach where to write the stream of elements).
+     * Override this method if you have a more complex structure in the XML file to create.
+     *
+     * @throws XMLStreamException if an error was encountered while starting the XML document with the root element
+     */
+    protected void createDocumentStart() throws XMLStreamException {
         xmlWriter.writeStartDocument();
         xmlWriter.writeStartElement(rootElement);
     }

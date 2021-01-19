@@ -5,6 +5,7 @@ import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBElement;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Marshaller;
+import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -96,6 +97,8 @@ public class StreamingMarshaller implements Closeable {
 
     /**
      * Writes the given element in XML to the output stream.
+     * Please note that the object has to have the {@link XmlRootElement} annotation,
+     * otherwise please use the method {@link #write(Class, String, Object)}.
      *
      * @param type   The type of the given {@code object}
      * @param object The element to marshal and write
@@ -104,8 +107,20 @@ public class StreamingMarshaller implements Closeable {
      */
     public synchronized <T> void write(Class<T> type, T object) throws JAXBException {
         XmlRootElement annotation = getAnnotation(type, XmlRootElement.class);
-        String objectName = annotation.name();
-        JAXBElement<T> element = new JAXBElement<>(QName.valueOf(objectName), type, object);
+        write(type, annotation.name(), object);
+    }
+
+    /**
+     * Writes the given element in XML to the output stream.
+     *
+     * @param type   The type of the given {@code object}
+     * @param name   The tag name of the XML element described in {@link XmlRootElement} or {@link XmlElement}
+     * @param object The element to marshal and write
+     * @param <T>    The element type
+     * @throws JAXBException if an error was encountered while marshalling the given object
+     */
+    public synchronized <T> void write(Class<T> type, String name, T object) throws JAXBException {
+        JAXBElement<T> element = new JAXBElement<>(QName.valueOf(name), type, object);
         getMarshaller(type).marshal(element, xmlWriter);
     }
 

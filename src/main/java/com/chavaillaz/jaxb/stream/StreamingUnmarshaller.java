@@ -3,18 +3,17 @@ package com.chavaillaz.jaxb.stream;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Unmarshaller;
+import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import lombok.extern.slf4j.Slf4j;
 
+import javax.xml.namespace.QName;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import java.io.Closeable;
 import java.io.InputStream;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.BiConsumer;
 
 import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getAnnotation;
@@ -49,8 +48,8 @@ import static javax.xml.stream.XMLStreamConstants.*;
 @Slf4j
 public class StreamingUnmarshaller implements Closeable {
 
-    private final Map<Class<?>, Unmarshaller> unmarshallerCache;
-    private final Map<String, Class<?>> mapType;
+    private final Map<Class<?>, Unmarshaller> unmarshallerCache = new HashMap<>();
+    private final Map<String, Class<?>> mapType = new HashMap<>();
     private XMLStreamReader xmlReader;
 
     /**
@@ -62,9 +61,6 @@ public class StreamingUnmarshaller implements Closeable {
      * @throws JAXBException            if an error was encountered while creating the unmarshaller instances
      */
     public StreamingUnmarshaller(Class<?>... types) throws JAXBException {
-        unmarshallerCache = new HashMap<>();
-        mapType = new HashMap<>();
-
         for (Class<?> type : types) {
             String key = getAnnotation(type, XmlRootElement.class).name();
             unmarshallerCache.put(type, createUnmarshaller(type));
@@ -73,14 +69,44 @@ public class StreamingUnmarshaller implements Closeable {
     }
 
     /**
+     * Creates a new streaming unmarshaller reading elements from the given types.
+     * Please note that the {@link Map} has to contain each type with its XML tag name
+     * (equivalent to the value in {@link XmlRootElement} or {@link XmlElement})
+     *
+     * @param types The list of elements types with their name that will be read by the unmarshaller
+     * @throws JAXBException if an error was encountered while creating the unmarshaller instances
+     */
+    public StreamingUnmarshaller(Map<Class<?>, String> types) throws JAXBException {
+        for (Map.Entry<Class<?>, String> entry : types.entrySet()) {
+            Class<?> type = entry.getKey();
+            unmarshallerCache.put(type, createUnmarshaller(type));
+            mapType.put(entry.getValue(), type);
+        }
+    }
+
+    /**
      * Opens the given input stream in which the XML file has to be read.
-     * It skips the beginning of the document with XML definition and the root element.
+     * It skips the beginning of the document with XML definition and the root element (container tag).
      * If an input stream is already open, it closes it before opening the new one.
      *
      * @param inputStream The input stream in which read the XML elements
      * @throws XMLStreamException if an error was encountered while creating the reader or while skipping tags
      */
     public synchronized void open(InputStream inputStream) throws XMLStreamException {
+        open(inputStream, 1);
+    }
+
+    /**
+     * Opens the given input stream in which the XML file has to be read.
+     * It skips the beginning of the document with XML definition and a number of container tags
+     * (putting 1 as {@code skipDepth} corresponds to only skip the root element).
+     * If an input stream is already open, it closes it before opening the new one.
+     *
+     * @param inputStream The input stream in which read the XML elements
+     * @param skipDepth   The number of container to skip before reaching the stream of desired elements
+     * @throws XMLStreamException if an error was encountered while creating the reader or while skipping tags
+     */
+    public synchronized void open(InputStream inputStream, int skipDepth) throws XMLStreamException {
         if (xmlReader != null) {
             close();
         }
@@ -94,8 +120,10 @@ public class StreamingUnmarshaller implements Closeable {
         // Ignore headers
         skipElements(START_DOCUMENT, DTD);
 
-        // Ignore root element
-        xmlReader.nextTag();
+        for (int i = 0; i < skipDepth; ++i) {
+            // Ignore root element
+            xmlReader.nextTag();
+        }
 
         // If there's no tag, ignore root element's end
         skipElements(END_ELEMENT);
@@ -132,7 +160,12 @@ public class StreamingUnmarshaller implements Closeable {
             throw new XMLStreamException("There is no more element to read");
         }
 
-        return mapType.get(xmlReader.getName().toString());
+        return Optional.ofNullable(xmlReader)
+                .map(XMLStreamReader::getName)
+                .map(QName::toString)
+                .map(mapType::get)
+                .orElseThrow(() -> new XMLStreamException("Unknown next type in the stream, " +
+                        "check given ones in constructor or if skipDepth parameter in open method is correct"));
     }
 
     /**

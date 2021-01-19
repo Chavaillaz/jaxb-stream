@@ -1,0 +1,40 @@
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+    <xs:element name="metrics" type="metricsType"/>
+
+    <xs:complexType name="diskType">
+        <xs:sequence>
+            <xs:element type="xs:string" name="disk"/>
+            <xs:element type="xs:long" name="freePartitionSpace"/>
+            <xs:element type="xs:long" name="usablePartitionSpace"/>
+            <xs:element type="xs:long" name="totalCapacity"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="memoryType">
+        <xs:sequence>
+            <xs:element type="xs:long" name="freeMemory"/>
+            <xs:element type="xs:long" name="maxMemory"/>
+            <xs:element type="xs:long" name="totalMemory"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="processorType">
+        <xs:sequence>
+            <xs:element type="xs:double" name="systemLoad"/>
+            <xs:element type="xs:double" name="processLoad"/>
+            <xs:element type="xs:int" name="availableProcessors"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="metricsType">
+        <xs:sequence>
+            <xs:element type="diskType" name="disk"/>
+            <xs:element type="memoryType" name="memory"/>
+            <xs:element type="processorType" name="processor"/>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

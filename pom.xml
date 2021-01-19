@@ -95,7 +95,7 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>3.7.0</version>
+            <version>3.7.7</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -105,6 +105,17 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>oss.sonatype.org</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
 
     <build>
         <plugins>
@@ -121,6 +132,31 @@
                             <version>${lombok.version}</version>
                         </path>
                     </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- Used only to generate JAXB classes for tests -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>jaxb2-maven-plugin</artifactId>
+                <version>3.0.0-SNAPSHOT</version>
+                <executions>
+                    <execution>
+                        <id>xjc</id>
+                        <goals>
+                            <goal>xjc</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <packageName>com.chavaillaz.jaxb.stream.schema</packageName>
+                    <sources>
+                        <source>src/test/resources/schema.xsd</source>
+                    </sources>
+                    <xjbSources>
+                        <xjbSource>src/test/resources/bindings.xjb</xjbSource>
+                    </xjbSources>
+                    <outputDirectory>target/generated-test-sources/jaxb</outputDirectory>
                 </configuration>
             </plugin>
 

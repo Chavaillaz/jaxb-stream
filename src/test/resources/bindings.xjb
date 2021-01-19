@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<jxb:bindings version="3.0"
+              xmlns:xs="http://www.w3.org/2001/XMLSchema"
+              xmlns:jxb="https://jakarta.ee/xml/ns/jaxb"
+              xmlns:xjc="http://java.sun.com/xml/ns/jaxb/xjc"
+              jxb:extensionBindingPrefixes="xjc">
+    <jxb:bindings schemaLocation="schema.xsd" node="/xs:schema">
+        <jxb:globalBindings>
+            <xjc:simple/>
+        </jxb:globalBindings>
+    </jxb:bindings>
+</jxb:bindings>

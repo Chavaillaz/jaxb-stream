@@ -5,7 +5,6 @@ version: 2.1
 orbs:
   snyk: snyk/snyk@1.1.1
   sonarcloud: sonarsource/sonarcloud@1.0.2
-  maven: circleci/maven@1.2.0
 
 # https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
@@ -17,7 +16,12 @@ jobs:
     # https://circleci.com/docs/2.0/configuration-reference/#steps
     steps:
       - checkout
-      - maven/test
+      - run:
+          name: Build
+          command: mvn -B -DskipTests clean package
+      - run:
+          name: Test
+          command: mvn test
       - sonarcloud/scan
       - snyk/scan
 

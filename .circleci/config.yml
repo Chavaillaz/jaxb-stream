@@ -1,0 +1,25 @@
+# https://circleci.com/docs/2.0/configuration-reference
+version: 2.1
+
+# https://circleci.com/docs/2.0/configuration-reference/#jobs
+jobs:
+  build-and-test:
+    # https://circleci.com/docs/2.0/executor-types/
+    # https://circleci.com/developer/images/image/cimg/openjdk
+    docker:
+      - image: cimg/openjdk:11.0
+    # https://circleci.com/docs/2.0/configuration-reference/#steps
+    steps:
+      - checkout
+      - run:
+          name: Build
+          command: mvn -B -DskipTests clean package
+      - run:
+          name: Test
+          command: mvn test
+
+# https://circleci.com/docs/2.0/configuration-reference/#workflows
+workflows:
+  standard:
+    jobs:
+      - build-and-test

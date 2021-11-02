@@ -18,7 +18,7 @@ jobs:
       - checkout
       - run:
           name: Build
-          command: mvn -B -Pcoverage clean package
+          command: mvn -B -Pcoverage clean verify
       - sonarcloud/scan
       - snyk/scan
 

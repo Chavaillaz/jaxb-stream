@@ -18,10 +18,7 @@ jobs:
       - checkout
       - run:
           name: Build
-          command: mvn -B -DskipTests clean package
-      - run:
-          name: Test
-          command: mvn test
+          command: mvn -B -Pcoverage clean package
       - sonarcloud/scan
       - snyk/scan
 

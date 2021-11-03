@@ -38,6 +38,8 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <lombok.version>1.18.22</lombok.version>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.organization>chavaillaz</sonar.organization>
     </properties>
 
     <dependencyManagement>

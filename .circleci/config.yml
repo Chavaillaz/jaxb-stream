@@ -4,6 +4,7 @@ version: 2.1
 # https://circleci.com/docs/2.0/orb-intro/
 orbs:
   snyk: snyk/snyk@1.1.1
+  sonarcloud: sonarsource/sonarcloud@1.0.2
 
 # https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
@@ -17,7 +18,8 @@ jobs:
       - checkout
       - run:
           name: Build
-          command: mvn -B -Pcoverage clean verify sonar:sonar -Dsonar.login=$SONAR_TOKEN
+          command: mvn -B -Pcoverage clean verify
+      - sonarcloud/scan
       - snyk/scan
 
 # https://circleci.com/docs/2.0/configuration-reference/#workflows

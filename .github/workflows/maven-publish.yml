@@ -1,4 +1,4 @@
-name: Publish to Github and Maven Central
+name: Publish to Maven Central
 on:
   release:
     types: [ created ]
@@ -29,14 +29,3 @@ jobs:
           MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
-      - name: Set up for publishing to GitHub Packages
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Publish to GitHub Packages
-        run: mvn --batch-mode deploy -Prelease -DskipTests
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -14,7 +14,6 @@ large files.
 The dependency is available in maven central (see badge for version):
 
 ```xml
-
 <dependency>
     <groupId>com.chavaillaz</groupId>
     <artifactId>jaxb-stream</artifactId>
@@ -73,12 +72,12 @@ Below an XML file from that example:
 For example, to write two metrics (memory and processor metrics), the following code can be used:
 
 ```java
-try(StreamingMarshaller marshaller=new StreamingMarshaller(MetricsList.class)){
-        marshaller.open(new FileOutputStream(fileName));
-        marshaller.write(MemoryMetric.class,new MemoryMetric());
-        marshaller.write(ProcessorMetric.class,new ProcessorMetric());
-        ...
-        }
+try (StreamingMarshaller marshaller = new StreamingMarshaller(MetricsList.class)) {
+    marshaller.open(new FileOutputStream(fileName));
+    marshaller.write(MemoryMetric.class, new MemoryMetric());
+    marshaller.write(ProcessorMetric.class, new ProcessorMetric());
+    ...
+}
 ```
 
 Note that you can also give the root element tag name instead of giving ```MetricsList.class```.
@@ -88,21 +87,21 @@ Note that you can also give the root element tag name instead of giving ```Metri
 For example, to read the written metrics (memory and processor metrics), the following code can be used:
 
 ```java
-try(StreamingUnmarshaller unmarshaller=new StreamingUnmarshaller(MemoryMetric.class,ProcessorMetric.class)){
-        unmarshaller.open(new FileInputStream(fileName));
-        unmarshaller.iterate((type,element)->doWhatYouWant(element));
-        }
+try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class, ProcessorMetric.class)) {
+    unmarshaller.open(new FileInputStream(fileName));
+    unmarshaller.iterate((type, element) -> doWhatYouWant(element));
+}
 ```
 
 or by iterating over each element by yourself:
 
 ```java
-try(StreamingUnmarshaller unmarshaller=new StreamingUnmarshaller(MemoryMetric.class,ProcessorMetric.class)){
-        unmarshaller.open(new FileInputStream(fileName));
-        while(unmarshaller.hasNext()){
+try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class, ProcessorMetric.class)) {
+    unmarshaller.open(new FileInputStream(fileName));
+    while (unmarshaller.hasNext()) {
         doWhatYouWant(unmarshaller.next(YourObject.class));
-        }
-        }
+    }
+}
 ```
 
 Note that if the classes given to the `StreamingUnmarshaller` do not have the `XmlRootElement` annotation

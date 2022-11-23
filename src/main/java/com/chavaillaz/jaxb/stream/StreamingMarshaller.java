@@ -47,8 +47,8 @@ import static java.lang.Boolean.TRUE;
 public class StreamingMarshaller implements Closeable {
 
     private final Map<Class<?>, Marshaller> marshallerCache = new HashMap<>();
-    private final String rootElement;
-    private XMLStreamWriter xmlWriter;
+    protected final String rootElement;
+    protected XMLStreamWriter xmlWriter;
 
     /**
      * Creates a new streaming marshaller writing elements in the given root element class.

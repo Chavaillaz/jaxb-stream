@@ -172,6 +172,7 @@ public class StreamingMarshaller implements Closeable {
     public synchronized void close() {
         try {
             if (xmlWriter != null) {
+                xmlWriter.writeCharacters("\n");
                 xmlWriter.writeEndDocument();
                 xmlWriter.close();
             }

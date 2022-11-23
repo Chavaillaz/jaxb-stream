@@ -90,7 +90,7 @@ public class StreamingMarshaller implements Closeable {
             close();
         }
 
-        xmlWriter = new IndentingXMLStreamWriter(XMLOutputFactory.newFactory().createXMLStreamWriter(outputStream));
+        xmlWriter = new IndentingXMLStreamWriter(XMLOutputFactory.newFactory().createXMLStreamWriter(outputStream, "UTF-8"));
         createDocumentStart();
     }
 

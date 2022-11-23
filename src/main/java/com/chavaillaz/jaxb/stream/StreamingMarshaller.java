@@ -1,5 +1,7 @@
 package com.chavaillaz.jaxb.stream;
 
+import static org.codehaus.stax2.XMLOutputFactory2.P_AUTOMATIC_EMPTY_ELEMENTS;
+import com.ctc.wstx.stax.WstxOutputFactory;
 import com.sun.xml.txw2.output.IndentingXMLStreamWriter;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBElement;
@@ -11,7 +13,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.xml.namespace.QName;
-import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.Closeable;
@@ -90,7 +91,9 @@ public class StreamingMarshaller implements Closeable {
             close();
         }
 
-        xmlWriter = new IndentingXMLStreamWriter(XMLOutputFactory.newFactory().createXMLStreamWriter(outputStream, "UTF-8"));
+        WstxOutputFactory wstxOutputFactory = new WstxOutputFactory();
+        wstxOutputFactory.setProperty(P_AUTOMATIC_EMPTY_ELEMENTS, true);
+        xmlWriter = new IndentingXMLStreamWriter(wstxOutputFactory.createXMLStreamWriter(outputStream, "UTF-8"));
         createDocumentStart();
     }
 

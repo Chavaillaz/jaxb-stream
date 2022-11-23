@@ -73,6 +73,12 @@
             <artifactId>jaxb-runtime</artifactId>
             <version>4.0.1</version>
         </dependency>
+        <dependency>
+            <groupId>com.fasterxml.woodstox</groupId>
+            <artifactId>woodstox-core</artifactId>
+            <version>6.4.0</version>
+        </dependency>
+
 
         <!-- Logs -->
         <dependency>

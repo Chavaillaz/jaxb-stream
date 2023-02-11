@@ -1,8 +1,9 @@
-# Run before:
-# export newVersion=1.0.0
+# Same as -> export newVersion=x.x.x
+echo "Enter version number (x.x.x): "
+read newVersion
 export GPG_TTY=$(tty)
 mvn versions:set -DnewVersion=${newVersion} -DgenerateBackupPoms=false
-mvn clean deploy -Prelease
+# mvn clean deploy -Prelease -> Done by Github actions
 git add .
 git commit -m "Release ${newVersion}"
 git tag ${newVersion}

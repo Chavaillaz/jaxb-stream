@@ -27,10 +27,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (it is not possible to add {@link XmlRootElement} annotations to all elements),
  * you have to specify the XML tag names when writing to or reading from an XML file.
  */
-public class StreamingXsdTest {
+class StreamingXsdTest {
 
     @Test
-    public void testSuccessfulWritingAndReadingFromXsd() throws Exception {
+    void testSuccessfulWritingAndReadingFromXsd() throws Exception {
         List<Object> writtenMetrics = writeMetrics(FILE_NAME);
         List<Object> readMetrics = readMetrics(FILE_NAME);
 

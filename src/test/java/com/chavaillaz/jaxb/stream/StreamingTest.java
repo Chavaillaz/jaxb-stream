@@ -16,20 +16,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
-public class StreamingTest {
+class StreamingTest {
 
     public static final String FILE_NAME = "metrics.xml";
     public static final Class<?>[] TYPES = { DiskMetric.class, MemoryMetric.class, ProcessorMetric.class };
 
     @Test
-    public void testSuccessfulWritingAndReading() {
+    void testSuccessfulWritingAndReading() {
         List<Metric> writtenMetrics = writeMetrics(FILE_NAME);
         List<Metric> readMetrics = readMetrics(FILE_NAME, TYPES);
         assertThat(readMetrics).isEqualTo(writtenMetrics);
     }
 
     @Test
-    public void testInvalidTypeForNextElement() throws Exception {
+    void testInvalidTypeForNextElement() throws Exception {
         writeMetrics(FILE_NAME);
         try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(TYPES)) {
             unmarshaller.open(new FileInputStream(FILE_NAME));
@@ -43,7 +43,7 @@ public class StreamingTest {
     }
 
     @Test
-    public void testReadTooManyElements() throws Exception {
+    void testReadTooManyElements() throws Exception {
         List<Metric> writtenMetrics = writeMetrics(FILE_NAME);
         try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(TYPES)) {
             unmarshaller.open(new FileInputStream(FILE_NAME));
@@ -57,19 +57,19 @@ public class StreamingTest {
     }
 
     @Test
-    public void testNullTypeAtInstantiation() {
+    void testNullTypeAtInstantiation() {
         assertThrows(NullPointerException.class, () -> new StreamingMarshaller((Class<?>) null));
         assertThrows(NullPointerException.class, () -> new StreamingMarshaller((String) null));
     }
 
     @Test
-    public void testMissingXmlRootElementAnnotation() {
+    void testMissingXmlRootElementAnnotation() {
         assertThrows(IllegalArgumentException.class, () -> new StreamingMarshaller(Object.class));
         assertThrows(IllegalArgumentException.class, () -> new StreamingUnmarshaller(Object.class));
     }
 
     @Test
-    public void testOpenTwice() throws Exception {
+    void testOpenTwice() throws Exception {
         try (StreamingMarshaller marshaller = spy(new StreamingMarshaller(MetricsList.class))) {
             marshaller.open(new FileOutputStream(FILE_NAME));
             marshaller.open(new FileOutputStream(FILE_NAME));
@@ -84,7 +84,7 @@ public class StreamingTest {
     }
 
     @Test
-    public void testCloseWithoutOpen() throws Exception {
+    void testCloseWithoutOpen() throws Exception {
         new StreamingMarshaller(MetricsList.class).close();
         new StreamingUnmarshaller(DiskMetric.class).close();
     }

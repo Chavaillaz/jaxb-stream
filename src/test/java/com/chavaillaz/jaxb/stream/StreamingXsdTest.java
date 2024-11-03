@@ -35,6 +35,8 @@ class StreamingXsdTest {
         List<Object> readMetrics = readMetrics(FILE_NAME);
 
         assertThat(writtenMetrics).usingRecursiveComparison()
+                .withEqualsForType(Double::equals, Double.class)
+                .withEqualsForType(Long::equals, Long.class)
                 .ignoringAllOverriddenEquals()
                 .ignoringCollectionOrder()
                 .isEqualTo(readMetrics);

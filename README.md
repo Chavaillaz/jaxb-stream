@@ -2,7 +2,7 @@
 
 ![Quality Gate](https://github.com/chavaillaz/jaxb-stream/actions/workflows/sonarcloud.yml/badge.svg)
 ![Dependency Check](https://github.com/chavaillaz/jaxb-stream/actions/workflows/snyk.yml/badge.svg)
-[![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.chavaillaz/jaxb-stream/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.chavaillaz/jaxb-stream)
+[![Maven Central](https://maven-badges.sml.io/maven-central/com.chavaillaz/jaxb-stream/badge.svg?subject=Maven%20Central&color=blue)](https://maven-badges.sml.io/maven-central/com.chavaillaz/jaxb-stream)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 This library allows you to read and write a list of elements (even from different types, but with the same parent)

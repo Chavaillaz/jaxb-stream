@@ -12,6 +12,7 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import java.io.Closeable;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 import java.util.function.BiConsumer;
@@ -51,19 +52,19 @@ public class StreamingUnmarshaller implements Closeable {
     private final Map<Class<?>, Unmarshaller> unmarshallerCache = new HashMap<>();
     private final Map<String, Class<?>> mapType = new HashMap<>();
     private XMLStreamReader xmlReader;
+    private InputStream inputStream;
 
     /**
      * Creates a new streaming unmarshaller reading elements from the given types.
      * Please note that the given classes need the {@link XmlRootElement} annotation.
+     * The underlying JAXB {@link Unmarshaller} for each type is created lazily, on first use.
      *
      * @param types The list of element types that will be read by the unmarshaller
      * @throws IllegalArgumentException if the {@link XmlRootElement} annotation is missing for the given types
-     * @throws JAXBException            if an error was encountered while creating the unmarshaller instances
      */
-    public StreamingUnmarshaller(Class<?>... types) throws JAXBException {
+    public StreamingUnmarshaller(Class<?>... types) {
         for (Class<?> type : types) {
             String key = getAnnotation(type, XmlRootElement.class).name();
-            unmarshallerCache.put(type, createUnmarshaller(type));
             mapType.put(key, type);
         }
     }
@@ -72,15 +73,13 @@ public class StreamingUnmarshaller implements Closeable {
      * Creates a new streaming unmarshaller reading elements from the given types.
      * Please note that the {@link Map} has to contain each type with its XML tag name
      * (equivalent to the value in {@link XmlRootElement} or {@link XmlElement})
+     * The underlying JAXB {@link Unmarshaller} for each type is created lazily, on first use.
      *
      * @param types The list of elements types with their name that will be read by the unmarshaller
-     * @throws JAXBException if an error was encountered while creating the unmarshaller instances
      */
-    public StreamingUnmarshaller(Map<Class<?>, String> types) throws JAXBException {
+    public StreamingUnmarshaller(Map<Class<?>, String> types) {
         for (Map.Entry<Class<?>, String> entry : types.entrySet()) {
-            Class<?> type = entry.getKey();
-            unmarshallerCache.put(type, createUnmarshaller(type));
-            mapType.put(entry.getValue(), type);
+            mapType.put(entry.getValue(), entry.getKey());
         }
     }
 
@@ -111,6 +110,7 @@ public class StreamingUnmarshaller implements Closeable {
             close();
         }
 
+        this.inputStream = inputStream;
         XMLInputFactory factory = XMLInputFactory.newInstance();
         // Deny all access to external references
         factory.setProperty(IS_SUPPORTING_EXTERNAL_ENTITIES, false);
@@ -168,12 +168,29 @@ public class StreamingUnmarshaller implements Closeable {
     }
 
     /**
+     * Gets the unmarshaller for the given type, creating and caching it on first use.
+     *
+     * @param type The type of elements the unmarshaller has to handle
+     * @return The unmarshaller handling the conversion of the given element type
+     * @throws JAXBException if an error was encountered while creating the unmarshaller
+     */
+    public synchronized Unmarshaller getUnmarshaller(Class<?> type) throws JAXBException {
+        Unmarshaller unmarshaller = unmarshallerCache.get(type);
+        if (unmarshaller == null) {
+            unmarshaller = createUnmarshaller(type);
+            unmarshallerCache.put(type, unmarshaller);
+        }
+        return unmarshaller;
+    }
+
+    /**
      * Gets the type of the next element in the stream.
      *
      * @return The next type or {@code null} when not found (in that case, add that type at class instantiation)
-     * @throws XMLStreamException if an error was encountered while detecting the next state
+     * @throws IllegalStateException if the stream has not been opened yet
+     * @throws XMLStreamException    if an error was encountered while detecting the next state
      */
-    public Class<?> getNextType() throws XMLStreamException {
+    public synchronized Class<?> getNextType() throws XMLStreamException {
         if (!hasNext()) {
             throw new XMLStreamException("There is no more element to read");
         }
@@ -192,9 +209,10 @@ public class StreamingUnmarshaller implements Closeable {
      * @param type The type of element to read
      * @param <T>  The element type
      * @return The element read from the stream
-     * @throws XMLStreamException if there's no more element to read
-     * @throws JAXBException      if there's a mismatch between the given type and the element type read
-     * @throws JAXBException      if an error was encountered while unmarshalling the element
+     * @throws IllegalStateException if the stream has not been opened yet
+     * @throws XMLStreamException    if there's no more element to read
+     * @throws JAXBException         if there's a mismatch between the given type and the element type read
+     * @throws JAXBException         if an error was encountered while unmarshalling the element
      */
     public synchronized <T> T next(Class<T> type) throws JAXBException, XMLStreamException {
         Class<?> nextType = getNextType();
@@ -202,7 +220,7 @@ public class StreamingUnmarshaller implements Closeable {
             throw new JAXBException("Mismatch between next type " + nextType + " and given type " + type);
         }
 
-        Unmarshaller unmarshaller = unmarshallerCache.get(type);
+        Unmarshaller unmarshaller = getUnmarshaller(type);
         T value = unmarshaller.unmarshal(xmlReader, type).getValue();
 
         skipElements(CHARACTERS, END_ELEMENT);
@@ -213,9 +231,13 @@ public class StreamingUnmarshaller implements Closeable {
      * Indicates if there is one more element to read in the stream.
      *
      * @return {@code true} if there is at least one more element, {@code false} otherwise
-     * @throws XMLStreamException if an error was encountered while detecting the next state
+     * @throws IllegalStateException if the stream has not been opened yet
+     * @throws XMLStreamException    if an error was encountered while detecting the next state
      */
-    public boolean hasNext() throws XMLStreamException {
+    public synchronized boolean hasNext() throws XMLStreamException {
+        if (xmlReader == null) {
+            throw new IllegalStateException("The stream has not been opened yet, please call open(InputStream) first");
+        }
         return xmlReader.hasNext();
     }
 
@@ -223,10 +245,11 @@ public class StreamingUnmarshaller implements Closeable {
      * Iterates over all elements with the given consumer.
      *
      * @param consumer The consumer called for each element of the stream
-     * @throws XMLStreamException if an error was encountered while detecting the next state
-     * @throws JAXBException      if an error was encountered while unmarshalling an element
+     * @throws IllegalStateException if the stream has not been opened yet
+     * @throws XMLStreamException    if an error was encountered while detecting the next state
+     * @throws JAXBException         if an error was encountered while unmarshalling an element
      */
-    public void iterate(BiConsumer<Class<?>, Object> consumer) throws JAXBException, XMLStreamException {
+    public synchronized void iterate(BiConsumer<Class<?>, Object> consumer) throws JAXBException, XMLStreamException {
         while (hasNext()) {
             Class<?> type = getNextType();
             consumer.accept(type, next(type));
@@ -234,7 +257,7 @@ public class StreamingUnmarshaller implements Closeable {
     }
 
     /**
-     * Closes the stream.
+     * Closes the stream and the underlying input stream given in {@link #open(InputStream)}.
      */
     @Override
     public synchronized void close() {
@@ -246,6 +269,19 @@ public class StreamingUnmarshaller implements Closeable {
             log.error("Unable to close XML stream reader", e);
         } finally {
             xmlReader = null;
+            closeInputStream();
+        }
+    }
+
+    private void closeInputStream() {
+        try {
+            if (inputStream != null) {
+                inputStream.close();
+            }
+        } catch (IOException e) {
+            log.error("Unable to close underlying input stream", e);
+        } finally {
+            inputStream = null;
         }
     }
 

@@ -16,6 +16,7 @@ import javax.xml.namespace.QName;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.Closeable;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.util.HashMap;
@@ -49,6 +50,7 @@ public class StreamingMarshaller implements Closeable {
     private final Map<Class<?>, Marshaller> marshallerCache = new HashMap<>();
     protected final String rootElement;
     protected XMLStreamWriter xmlWriter;
+    protected OutputStream outputStream;
 
     /**
      * Creates a new streaming marshaller writing elements in the given root element class.
@@ -79,7 +81,7 @@ public class StreamingMarshaller implements Closeable {
     }
 
     /**
-     * Opens the given output stream in the XML file has to be written.
+     * Opens the given output stream in which the XML file has to be written.
      * It creates the beginning of the document with XML definition and the root element.
      * If an output stream is already open, it closes it before opening the new one.
      *
@@ -91,6 +93,7 @@ public class StreamingMarshaller implements Closeable {
             close();
         }
 
+        this.outputStream = outputStream;
         WstxOutputFactory wstxOutputFactory = new WstxOutputFactory();
         wstxOutputFactory.setProperty(P_AUTOMATIC_EMPTY_ELEMENTS, true);
         xmlWriter = new IndentingXMLStreamWriter(wstxOutputFactory.createXMLStreamWriter(outputStream, "UTF-8"));
@@ -145,7 +148,7 @@ public class StreamingMarshaller implements Closeable {
      * @return The marshaller handling the conversion of the given element type
      * @throws JAXBException if an error was encountered while creating the marshaller
      */
-    public <T> Marshaller getMarshaller(Class<T> type) throws JAXBException {
+    public synchronized <T> Marshaller getMarshaller(Class<T> type) throws JAXBException {
         Marshaller marshaller = marshallerCache.get(type);
         if (marshaller == null) {
             marshaller = createMarshaller(type);
@@ -169,7 +172,7 @@ public class StreamingMarshaller implements Closeable {
     }
 
     /**
-     * Writes the closing tag and closes the stream.
+     * Writes the closing tag, closes the stream and the underlying output stream given in {@link #open(OutputStream)}.
      */
     @Override
     public synchronized void close() {
@@ -183,6 +186,19 @@ public class StreamingMarshaller implements Closeable {
             log.error("Unable to close XML stream writer", e);
         } finally {
             xmlWriter = null;
+            closeOutputStream();
+        }
+    }
+
+    private void closeOutputStream() {
+        try {
+            if (outputStream != null) {
+                outputStream.close();
+            }
+        } catch (IOException e) {
+            log.error("Unable to close underlying output stream", e);
+        } finally {
+            outputStream = null;
         }
     }
 

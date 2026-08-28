@@ -2,14 +2,22 @@ package com.chavaillaz.jaxb.stream;
 
 import com.chavaillaz.jaxb.stream.metric.*;
 import jakarta.xml.bind.JAXBException;
+import jakarta.xml.bind.annotation.XmlRootElement;
 import org.junit.jupiter.api.Test;
 
 import javax.xml.stream.XMLStreamException;
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FilterInputStream;
+import java.io.FilterOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.chavaillaz.jaxb.stream.metric.DiskMetric.getMetricsAllDisks;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -87,6 +95,98 @@ class StreamingTest {
     void testCloseWithoutOpen() throws Exception {
         new StreamingMarshaller(MetricsList.class).close();
         new StreamingUnmarshaller(DiskMetric.class).close();
+    }
+
+    @Test
+    void testUsingUnmarshallerBeforeOpen() throws Exception {
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(DiskMetric.class)) {
+            assertThrows(IllegalStateException.class, unmarshaller::hasNext);
+        }
+    }
+
+    @Test
+    void testCloseClosesUnderlyingStreams() throws Exception {
+        TrackingOutputStream outputStream = new TrackingOutputStream(new FileOutputStream(FILE_NAME));
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
+            marshaller.open(outputStream);
+            marshaller.write(MemoryMetric.class, new MemoryMetric());
+        }
+        assertThat(outputStream.closed).isTrue();
+
+        TrackingInputStream inputStream = new TrackingInputStream(new FileInputStream(FILE_NAME));
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class)) {
+            unmarshaller.open(inputStream);
+        }
+        assertThat(inputStream.closed).isTrue();
+    }
+
+    @Test
+    void testUnmarshallerCreationIsLazy() throws Exception {
+        // Construction succeeds even though BrokenType cannot be turned into a JAXBContext,
+        // proving the unmarshaller is created lazily rather than eagerly at instantiation
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(BrokenType.class)) {
+            assertThrows(JAXBException.class, () -> unmarshaller.getUnmarshaller(BrokenType.class));
+        }
+    }
+
+    @Test
+    void testMarshallerCreationIsLazy() throws Exception {
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("root")) {
+            assertThrows(JAXBException.class, () -> marshaller.getMarshaller(BrokenType.class));
+        }
+    }
+
+    @Test
+    void testExternalEntityIsRejected() throws Exception {
+        String maliciousXml = "<?xml version=\"1.0\"?>\n"
+                + "<!DOCTYPE metrics [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n"
+                + "<metrics>&xxe;</metrics>";
+        byte[] payload = maliciousXml.getBytes(StandardCharsets.UTF_8);
+
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(Map.of())) {
+            assertThrows(XMLStreamException.class, () -> unmarshaller.open(new ByteArrayInputStream(payload)));
+        }
+    }
+
+    /**
+     * Non-static inner class: JAXB cannot build a {@link jakarta.xml.bind.JAXBContext} for it,
+     * so it is used to prove that marshaller/unmarshaller creation is deferred until first use.
+     */
+    @XmlRootElement(name = "broken")
+    private class BrokenType {
+
+    }
+
+    private static class TrackingOutputStream extends FilterOutputStream {
+
+        private boolean closed = false;
+
+        TrackingOutputStream(OutputStream out) {
+            super(out);
+        }
+
+        @Override
+        public void close() throws IOException {
+            closed = true;
+            super.close();
+        }
+
+    }
+
+    private static class TrackingInputStream extends FilterInputStream {
+
+        private boolean closed = false;
+
+        TrackingInputStream(InputStream in) {
+            super(in);
+        }
+
+        @Override
+        public void close() throws IOException {
+            closed = true;
+            super.close();
+        }
+
     }
 
     private List<Metric> writeMetrics(String fileName) {

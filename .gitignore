@@ -19,3 +19,4 @@ hs_err_pid*
 # Miscellaneous
 *.log
 *.xml
+!checkstyle.xml

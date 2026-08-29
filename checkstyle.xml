@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+    Import conventions, following the layout common in Apache projects:
+      1. Static imports (alphabetized)
+      2. java.* / javax.* / jakarta.* (alphabetized)
+      3. Third-party packages (alphabetized)
+      4. This project's own packages (alphabetized)
+    Each group is separated by a blank line, wildcard and unused imports are disallowed.
+-->
+<module name="Checker">
+    <module name="TreeWalker">
+        <module name="CustomImportOrder">
+            <property name="customImportOrderRules"
+                      value="STATIC###STANDARD_JAVA_PACKAGE###THIRD_PARTY_PACKAGE###SPECIAL_IMPORTS"/>
+            <property name="specialImportsRegExp" value="^com\.chavaillaz\."/>
+            <property name="standardPackageRegExp" value="^(java|javax|jakarta)\."/>
+            <property name="separateLineBetweenGroups" value="true"/>
+            <property name="sortImportsInGroupAlphabetically" value="true"/>
+        </module>
+        <module name="AvoidStarImport"/>
+        <module name="RedundantImport"/>
+        <module name="UnusedImports"/>
+    </module>
+</module>

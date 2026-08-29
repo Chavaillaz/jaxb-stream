@@ -1,7 +1,9 @@
 package com.chavaillaz.jaxb.stream;
 
-import com.ctc.wstx.stax.WstxOutputFactory;
-import com.sun.xml.txw2.output.IndentingXMLStreamWriter;
+import static jakarta.xml.bind.Marshaller.JAXB_FRAGMENT;
+import static java.lang.Boolean.TRUE;
+import static org.codehaus.stax2.XMLOutputFactory2.P_AUTOMATIC_EMPTY_ELEMENTS;
+
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBElement;
 import jakarta.xml.bind.JAXBException;
@@ -9,14 +11,6 @@ import jakarta.xml.bind.Marshaller;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import jakarta.xml.bind.annotation.XmlSchema;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.Nullable;
-
-import javax.xml.namespace.QName;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamWriter;
-import javax.xml.validation.Schema;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -25,10 +19,16 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import javax.xml.namespace.QName;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamWriter;
+import javax.xml.validation.Schema;
 
-import static jakarta.xml.bind.Marshaller.JAXB_FRAGMENT;
-import static java.lang.Boolean.TRUE;
-import static org.codehaus.stax2.XMLOutputFactory2.P_AUTOMATIC_EMPTY_ELEMENTS;
+import com.ctc.wstx.stax.WstxOutputFactory;
+import com.sun.xml.txw2.output.IndentingXMLStreamWriter;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 
 /**
  * JAXB marshaller using streaming to write XML into the given output stream.
@@ -61,14 +61,14 @@ import static org.codehaus.stax2.XMLOutputFactory2.P_AUTOMATIC_EMPTY_ELEMENTS;
 public class StreamingMarshaller implements Closeable {
 
     /**
-     * The marshaller created for each type already written, keyed by type, so it is only built once.
-     */
-    private final Map<Class<?>, Marshaller> marshallerCache = new HashMap<>();
-
-    /**
      * The tag name of the XML container element in which the written elements are stored.
      */
     protected final String rootElement;
+
+    /**
+     * The marshaller created for each type already written, keyed by type, so it is only built once.
+     */
+    private final Map<Class<?>, Marshaller> marshallerCache = new HashMap<>();
 
     /**
      * The writer used to write the XML document, {@code null} until {@link #open(OutputStream)} is called.
@@ -172,8 +172,8 @@ public class StreamingMarshaller implements Closeable {
      * @param outputStream The output stream in which write the XML elements
      * @throws IllegalStateException if this instance is a nested container returned by {@link #openChild(String)}
      * @throws XMLStreamException    if an error was encountered while starting the XML document with the root
-     *                                element, in which case this instance is left in the same not-open state
-     *                                as before this call
+     *                               element, in which case this instance is left in the same not-open state
+     *                               as before this call
      */
     public synchronized void open(OutputStream outputStream) throws XMLStreamException {
         if (this.childContainer) {

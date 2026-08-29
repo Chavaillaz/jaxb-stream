@@ -1,22 +1,13 @@
 package com.chavaillaz.jaxb.stream;
 
-import com.chavaillaz.jaxb.stream.metric.DiskMetric;
-import com.chavaillaz.jaxb.stream.metric.MemoryMetric;
-import com.chavaillaz.jaxb.stream.metric.Metric;
-import com.chavaillaz.jaxb.stream.metric.ProcessorMetric;
+import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import javax.xml.XMLConstants;
-import javax.xml.transform.stream.StreamSource;
-import javax.xml.validation.Schema;
-import javax.xml.validation.SchemaFactory;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -27,10 +18,20 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import javax.xml.XMLConstants;
+import javax.xml.transform.stream.StreamSource;
+import javax.xml.validation.Schema;
+import javax.xml.validation.SchemaFactory;
 
-import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import com.chavaillaz.jaxb.stream.metric.DiskMetric;
+import com.chavaillaz.jaxb.stream.metric.MemoryMetric;
+import com.chavaillaz.jaxb.stream.metric.Metric;
+import com.chavaillaz.jaxb.stream.metric.ProcessorMetric;
 
 @DisplayName("Iterable/Stream API, schema validation and output configuration")
 class StreamingErgonomicsTest {
@@ -53,6 +54,35 @@ class StreamingErgonomicsTest {
 
     private File file() {
         return tempDir.resolve(FILE_NAME).toFile();
+    }
+
+    private List<Metric> writeMetrics() throws Exception {
+        List<Metric> metrics = new ArrayList<>();
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
+            marshaller.open(new FileOutputStream(file()));
+
+            DiskMetric disk = new DiskMetric();
+            marshaller.write(DiskMetric.class, disk);
+            metrics.add(disk);
+
+            MemoryMetric memory = new MemoryMetric();
+            marshaller.write(MemoryMetric.class, memory);
+            metrics.add(memory);
+
+            ProcessorMetric processor = new ProcessorMetric();
+            marshaller.write(ProcessorMetric.class, processor);
+            metrics.add(processor);
+        }
+        return metrics;
+    }
+
+    @XmlAccessorType(FIELD)
+    @XmlRootElement(name = "item")
+    public static class Item {
+
+        @XmlElement(name = "value")
+        public int value;
+
     }
 
     @Nested
@@ -101,26 +131,6 @@ class StreamingErgonomicsTest {
             }
         }
 
-    }
-
-    private List<Metric> writeMetrics() throws Exception {
-        List<Metric> metrics = new ArrayList<>();
-        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
-            marshaller.open(new FileOutputStream(file()));
-
-            DiskMetric disk = new DiskMetric();
-            marshaller.write(DiskMetric.class, disk);
-            metrics.add(disk);
-
-            MemoryMetric memory = new MemoryMetric();
-            marshaller.write(MemoryMetric.class, memory);
-            metrics.add(memory);
-
-            ProcessorMetric processor = new ProcessorMetric();
-            marshaller.write(ProcessorMetric.class, processor);
-            metrics.add(processor);
-        }
-        return metrics;
     }
 
     @Nested
@@ -263,15 +273,6 @@ class StreamingErgonomicsTest {
             String xml = output.toString(StandardCharsets.UTF_8);
             assertThat(xml).doesNotContain("\n    ");
         }
-
-    }
-
-    @XmlAccessorType(FIELD)
-    @XmlRootElement(name = "item")
-    public static class Item {
-
-        @XmlElement(name = "value")
-        public int value;
 
     }
 

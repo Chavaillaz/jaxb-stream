@@ -1,14 +1,35 @@
 package com.chavaillaz.jaxb.stream;
 
+import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getAnnotation;
+import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getNamespace;
+import static javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD;
+import static javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET;
+import static javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING;
+import static javax.xml.stream.XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES;
+import static javax.xml.stream.XMLInputFactory.SUPPORT_DTD;
+import static javax.xml.stream.XMLStreamConstants.CHARACTERS;
+import static javax.xml.stream.XMLStreamConstants.DTD;
+import static javax.xml.stream.XMLStreamConstants.END_ELEMENT;
+import static javax.xml.stream.XMLStreamConstants.START_DOCUMENT;
+
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Unmarshaller;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
-import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.Nullable;
-
-import javax.xml.XMLConstants;
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+import java.util.function.BiConsumer;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
@@ -20,22 +41,9 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMResult;
 import javax.xml.transform.stax.StAXSource;
 import javax.xml.validation.Schema;
-import java.io.Closeable;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.*;
-import java.util.function.BiConsumer;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
-import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getAnnotation;
-import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getNamespace;
-import static javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD;
-import static javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET;
-import static javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING;
-import static javax.xml.stream.XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES;
-import static javax.xml.stream.XMLInputFactory.SUPPORT_DTD;
-import static javax.xml.stream.XMLStreamConstants.*;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 
 /**
  * JAXB unmarshaller using streaming to read XML from the given input stream.
@@ -314,11 +322,6 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
             try {
                 TransformerFactory factory = TransformerFactory.newInstance();
                 factory.setFeature(FEATURE_SECURE_PROCESSING, true);
-                // Deny all access to external references, as with the XMLInputFactory in open(). Not currently
-                // reachable in practice (the source is always a StAXSource wrapping the already-hardened
-                // xmlReader, which never survives a DOCTYPE past open() in the first place), but hardening the
-                // factory itself doesn't depend on that staying true and avoids flagging as an XXE risk by tools
-                // that can't verify it.
                 factory.setAttribute(ACCESS_EXTERNAL_DTD, "");
                 factory.setAttribute(ACCESS_EXTERNAL_STYLESHEET, "");
                 this.subtreeCopier = factory.newTransformer();
@@ -435,7 +438,7 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
         while (hasNext()) {
             Class<?> type = getNextType();
             if (this.skipInvalidElements) {
-                 readResilient(type).ifPresent(value -> consumer.accept(type, value));
+                readResilient(type).ifPresent(value -> consumer.accept(type, value));
             } else {
                 consumer.accept(type, next(type));
             }

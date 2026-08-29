@@ -1,12 +1,12 @@
 package com.chavaillaz.jaxb.stream.metric;
 
+import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
+
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlRootElement;
-import lombok.experimental.Delegate;
-
 import java.util.List;
 
-import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
+import lombok.experimental.Delegate;
 
 @XmlAccessorType(FIELD)
 @XmlRootElement(name = "metrics")

@@ -1,15 +1,15 @@
 package com.chavaillaz.jaxb.stream.metric;
 
+import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
+
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
 import java.io.File;
 import java.util.Arrays;
 
-import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 @Data
 @AllArgsConstructor
@@ -49,7 +49,7 @@ public class DiskMetric implements Metric {
     }
 
     /**
-     * Gets currenet metrics for the given partition folder.
+     * Gets current metrics for the given partition folder.
      *
      * @param diskPartition The partition folder
      */

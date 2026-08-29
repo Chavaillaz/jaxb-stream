@@ -1,14 +1,15 @@
 package com.chavaillaz.jaxb.stream.metric;
 
-import com.sun.management.OperatingSystemMXBean;
+import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
+import static java.lang.management.ManagementFactory.getOperatingSystemMXBean;
+
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
+
+import com.sun.management.OperatingSystemMXBean;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-
-import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
-import static java.lang.management.ManagementFactory.getOperatingSystemMXBean;
 
 @Data
 @AllArgsConstructor
@@ -48,4 +49,5 @@ public class ProcessorMetric implements Metric {
     public String getName() {
         return "Processor metric";
     }
+
 }

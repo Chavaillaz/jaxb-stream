@@ -1,14 +1,15 @@
 package com.chavaillaz.jaxb.stream;
 
-import com.chavaillaz.jaxb.stream.metric.*;
+import static com.chavaillaz.jaxb.stream.metric.DiskMetric.getMetricsAllDisks;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.annotation.XmlRootElement;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import javax.xml.stream.XMLStreamException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -24,12 +25,18 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import javax.xml.stream.XMLStreamException;
 
-import static com.chavaillaz.jaxb.stream.metric.DiskMetric.getMetricsAllDisks;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertAll;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import com.chavaillaz.jaxb.stream.metric.DiskMetric;
+import com.chavaillaz.jaxb.stream.metric.MemoryMetric;
+import com.chavaillaz.jaxb.stream.metric.Metric;
+import com.chavaillaz.jaxb.stream.metric.MetricsList;
+import com.chavaillaz.jaxb.stream.metric.ProcessorMetric;
 
 @DisplayName("StreamingMarshaller and StreamingUnmarshaller")
 class StreamingTest {
@@ -42,6 +49,90 @@ class StreamingTest {
 
     private File file() {
         return tempDir.resolve(FILE_NAME).toFile();
+    }
+
+    private List<Metric> writeMetrics(File file) {
+        List<Metric> metrics = new ArrayList<>();
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
+            marshaller.open(new FileOutputStream(file));
+            writeMetrics(marshaller, metrics, DiskMetric.class, getMetricsAllDisks());
+            writeMetrics(marshaller, metrics, MemoryMetric.class, new MemoryMetric());
+            writeMetrics(marshaller, metrics, ProcessorMetric.class, new ProcessorMetric());
+        } catch (XMLStreamException | JAXBException | IOException e) {
+            throw new RuntimeException(e);
+        }
+        return metrics;
+    }
+
+    private <T extends Metric> void writeMetrics(StreamingMarshaller marshaller, List<Metric> list, Class<T> type, T... metrics) throws JAXBException {
+        for (T metric : metrics) {
+            marshaller.write(type, metric);
+            list.add(metric);
+        }
+    }
+
+    private List<Metric> readMetrics(File file, Class<?>... types) {
+        List<Metric> metrics = new ArrayList<>();
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(types)) {
+            unmarshaller.open(new FileInputStream(file));
+            unmarshaller.iterate((type, element) -> metrics.add((Metric) element));
+        } catch (XMLStreamException | JAXBException | IOException e) {
+            throw new RuntimeException(e);
+        }
+        return metrics;
+    }
+
+    private Object readNext(StreamingUnmarshaller unmarshaller) throws XMLStreamException, JAXBException {
+        return unmarshaller.next(unmarshaller.getNextType());
+    }
+
+    /**
+     * Always fails while creating the document start, to test the cleanup performed by {@link StreamingMarshaller}
+     * when {@link StreamingMarshaller#open(OutputStream)} fails partway through.
+     */
+    private static class FailingMarshaller extends StreamingMarshaller {
+
+        FailingMarshaller(String rootElement) {
+            super(rootElement);
+        }
+
+        @Override
+        protected void createDocumentStart() throws XMLStreamException {
+            throw new XMLStreamException("Simulated failure");
+        }
+
+    }
+
+    private static class TrackingOutputStream extends FilterOutputStream {
+
+        private boolean closed = false;
+
+        TrackingOutputStream(OutputStream out) {
+            super(out);
+        }
+
+        @Override
+        public void close() throws IOException {
+            this.closed = true;
+            super.close();
+        }
+
+    }
+
+    private static class TrackingInputStream extends FilterInputStream {
+
+        private boolean closed = false;
+
+        TrackingInputStream(InputStream in) {
+            super(in);
+        }
+
+        @Override
+        public void close() throws IOException {
+            this.closed = true;
+            super.close();
+        }
+
     }
 
     @Nested
@@ -185,14 +276,14 @@ class StreamingTest {
 
         @Test
         @DisplayName("Closing without ever opening is a safe no-op")
-        void testCloseWithoutOpen() throws Exception {
+        void testCloseWithoutOpen() {
             new StreamingMarshaller(MetricsList.class).close();
             new StreamingUnmarshaller(DiskMetric.class).close();
         }
 
         @Test
         @DisplayName("Reading before opening throws IllegalStateException")
-        void testUsingUnmarshallerBeforeOpen() throws Exception {
+        void testUsingUnmarshallerBeforeOpen() {
             try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(DiskMetric.class)) {
                 assertThrows(IllegalStateException.class, unmarshaller::hasNext);
             }
@@ -200,7 +291,7 @@ class StreamingTest {
 
         @Test
         @DisplayName("Writing before opening throws IllegalStateException")
-        void testWriteBeforeOpenThrowsIllegalState() throws Exception {
+        void testWriteBeforeOpenThrowsIllegalState() {
             try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
                 assertThrows(IllegalStateException.class, () -> marshaller.write(MemoryMetric.class, new MemoryMetric()));
             }
@@ -225,7 +316,7 @@ class StreamingTest {
 
         @Test
         @DisplayName("A failed open() leaves the marshaller in a clean not-open state")
-        void testFailedOpenLeavesMarshallerNotOpen() throws Exception {
+        void testFailedOpenLeavesMarshallerNotOpen() {
             try (FailingMarshaller marshaller = new FailingMarshaller("metrics")) {
                 assertThrows(XMLStreamException.class, () -> marshaller.open(new ByteArrayOutputStream()));
                 // A failed open() must leave the instance in a clean not-open state, not a broken "open" one
@@ -235,7 +326,7 @@ class StreamingTest {
 
         @Test
         @DisplayName("A failed open() leaves the unmarshaller in a clean not-open state")
-        void testFailedOpenLeavesUnmarshallerNotOpen() throws Exception {
+        void testFailedOpenLeavesUnmarshallerNotOpen() {
             String maliciousXml = "<?xml version=\"1.0\"?>\n"
                     + "<!DOCTYPE metrics [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n"
                     + "<metrics>&xxe;</metrics>";
@@ -280,7 +371,7 @@ class StreamingTest {
 
         @Test
         @DisplayName("An external entity (XXE) payload is rejected")
-        void testExternalEntityIsRejected() throws Exception {
+        void testExternalEntityIsRejected() {
             String maliciousXml = "<?xml version=\"1.0\"?>\n"
                     + "<!DOCTYPE metrics [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n"
                     + "<metrics>&xxe;</metrics>";
@@ -294,96 +385,12 @@ class StreamingTest {
     }
 
     /**
-     * Always fails while creating the document start, to test the cleanup performed by {@link StreamingMarshaller}
-     * when {@link StreamingMarshaller#open(OutputStream)} fails partway through.
-     */
-    private static class FailingMarshaller extends StreamingMarshaller {
-
-        FailingMarshaller(String rootElement) {
-            super(rootElement);
-        }
-
-        @Override
-        protected void createDocumentStart() throws XMLStreamException {
-            throw new XMLStreamException("Simulated failure");
-        }
-
-    }
-
-    /**
      * Non-static inner class: JAXB cannot build a {@link jakarta.xml.bind.JAXBContext} for it,
      * so it is used to prove that marshaller/unmarshaller creation is deferred until first use.
      */
     @XmlRootElement(name = "broken")
     private class BrokenType {
 
-    }
-
-    private static class TrackingOutputStream extends FilterOutputStream {
-
-        private boolean closed = false;
-
-        TrackingOutputStream(OutputStream out) {
-            super(out);
-        }
-
-        @Override
-        public void close() throws IOException {
-            this.closed = true;
-            super.close();
-        }
-
-    }
-
-    private static class TrackingInputStream extends FilterInputStream {
-
-        private boolean closed = false;
-
-        TrackingInputStream(InputStream in) {
-            super(in);
-        }
-
-        @Override
-        public void close() throws IOException {
-            this.closed = true;
-            super.close();
-        }
-
-    }
-
-    private List<Metric> writeMetrics(File file) {
-        List<Metric> metrics = new ArrayList<>();
-        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
-            marshaller.open(new FileOutputStream(file));
-            writeMetrics(marshaller, metrics, DiskMetric.class, getMetricsAllDisks());
-            writeMetrics(marshaller, metrics, MemoryMetric.class, new MemoryMetric());
-            writeMetrics(marshaller, metrics, ProcessorMetric.class, new ProcessorMetric());
-        } catch (XMLStreamException | JAXBException | IOException e) {
-            throw new RuntimeException(e);
-        }
-        return metrics;
-    }
-
-    private <T extends Metric> void writeMetrics(StreamingMarshaller marshaller, List<Metric> list, Class<T> type, T... metrics) throws JAXBException {
-        for (T metric : metrics) {
-            marshaller.write(type, metric);
-            list.add(metric);
-        }
-    }
-
-    private List<Metric> readMetrics(File file, Class<?>... types) {
-        List<Metric> metrics = new ArrayList<>();
-        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(types)) {
-            unmarshaller.open(new FileInputStream(file));
-            unmarshaller.iterate((type, element) -> metrics.add((Metric) element));
-        } catch (XMLStreamException | JAXBException | IOException e) {
-            throw new RuntimeException(e);
-        }
-        return metrics;
-    }
-
-    private Object readNext(StreamingUnmarshaller unmarshaller) throws XMLStreamException, JAXBException {
-        return unmarshaller.next(unmarshaller.getNextType());
     }
 
 }

@@ -1,15 +1,11 @@
 package com.chavaillaz.jaxb.stream;
 
-import com.chavaillaz.jaxb.stream.schema.DiskType;
-import com.chavaillaz.jaxb.stream.schema.MemoryType;
-import com.chavaillaz.jaxb.stream.schema.Metrics;
-import com.chavaillaz.jaxb.stream.schema.ProcessorType;
-import com.sun.management.OperatingSystemMXBean;
-import jakarta.xml.bind.annotation.XmlRootElement;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static com.chavaillaz.jaxb.stream.StreamingTest.FILE_NAME;
+import static java.lang.Runtime.getRuntime;
+import static java.lang.management.ManagementFactory.getOperatingSystemMXBean;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.xml.bind.annotation.XmlRootElement;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -18,10 +14,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.chavaillaz.jaxb.stream.StreamingTest.FILE_NAME;
-import static java.lang.Runtime.getRuntime;
-import static java.lang.management.ManagementFactory.getOperatingSystemMXBean;
-import static org.assertj.core.api.Assertions.assertThat;
+import com.sun.management.OperatingSystemMXBean;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import com.chavaillaz.jaxb.stream.schema.DiskType;
+import com.chavaillaz.jaxb.stream.schema.MemoryType;
+import com.chavaillaz.jaxb.stream.schema.Metrics;
+import com.chavaillaz.jaxb.stream.schema.ProcessorType;
 
 /**
  * This tests uses the generated classes from the XSD available in test resources.

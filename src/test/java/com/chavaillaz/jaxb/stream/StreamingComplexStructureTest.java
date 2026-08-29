@@ -1,17 +1,8 @@
 package com.chavaillaz.jaxb.stream;
 
-import com.chavaillaz.jaxb.stream.metric.MemoryMetric;
-import com.chavaillaz.jaxb.stream.metric.Metric;
-import com.chavaillaz.jaxb.stream.metric.ProcessorMetric;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.stream.XMLStreamException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -22,9 +13,18 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.stream.XMLStreamException;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+import com.chavaillaz.jaxb.stream.metric.MemoryMetric;
+import com.chavaillaz.jaxb.stream.metric.Metric;
+import com.chavaillaz.jaxb.stream.metric.ProcessorMetric;
 
 /**
  * Tests the extension points documented in the README for XML files with a more complex
@@ -39,46 +39,6 @@ class StreamingComplexStructureTest {
 
     @TempDir
     Path tempDir;
-
-    /**
-     * Wraps the usual {@code metrics} container in an additional {@code envelope} element.
-     */
-    static class NestedMarshaller extends StreamingMarshaller {
-
-        NestedMarshaller(String rootElement) {
-            super(rootElement);
-        }
-
-        @Override
-        protected void createDocumentStart() throws XMLStreamException {
-            this.xmlWriter.writeStartDocument();
-            this.xmlWriter.writeStartElement("envelope");
-            this.xmlWriter.writeStartElement(this.rootElement);
-        }
-
-    }
-
-    /**
-     * Reimplements {@link #skipDocumentStart(int)} using direct access to the protected {@code xmlReader}
-     * field, proving the unmarshaller's skip extension point is as capable as the marshaller's
-     * {@code createDocumentStart()}, which already relies on the protected {@code xmlWriter} field.
-     */
-    static class CustomSkipUnmarshaller extends StreamingUnmarshaller {
-
-        CustomSkipUnmarshaller(Map<Class<?>, String> types) {
-            super(types);
-        }
-
-        @Override
-        protected void skipDocumentStart(int skipDepth) throws XMLStreamException {
-            super.skipDocumentStart(skipDepth);
-            // Only possible because xmlReader is protected, like xmlWriter on StreamingMarshaller
-            if (this.xmlReader == null || !this.xmlReader.hasNext()) {
-                throw new XMLStreamException("Expected the reader to be usable after skipping the document start");
-            }
-        }
-
-    }
 
     private File file() {
         return tempDir.resolve(FILE_NAME).toFile();
@@ -149,7 +109,7 @@ class StreamingComplexStructureTest {
 
     @Test
     @DisplayName("A skipDepth deeper than the document fails to open and leaves the unmarshaller not-open")
-    void testExcessiveSkipDepthLeavesUnmarshallerNotOpen() throws Exception {
+    void testExcessiveSkipDepthLeavesUnmarshallerNotOpen() {
         // Only 2 levels of nesting, no text content to trip nextTag() early -
         // forces it to run past the actual end of the document
         String xml = "<a><b><c/></b></a>";
@@ -258,6 +218,46 @@ class StreamingComplexStructureTest {
                 assertThrows(IllegalStateException.class, () -> child.open(new ByteArrayOutputStream()));
             }
         }
+    }
+
+    /**
+     * Wraps the usual {@code metrics} container in an additional {@code envelope} element.
+     */
+    static class NestedMarshaller extends StreamingMarshaller {
+
+        NestedMarshaller(String rootElement) {
+            super(rootElement);
+        }
+
+        @Override
+        protected void createDocumentStart() throws XMLStreamException {
+            this.xmlWriter.writeStartDocument();
+            this.xmlWriter.writeStartElement("envelope");
+            this.xmlWriter.writeStartElement(this.rootElement);
+        }
+
+    }
+
+    /**
+     * Reimplements {@link #skipDocumentStart(int)} using direct access to the protected {@code xmlReader}
+     * field, proving the unmarshaller's skip extension point is as capable as the marshaller's
+     * {@code createDocumentStart()}, which already relies on the protected {@code xmlWriter} field.
+     */
+    static class CustomSkipUnmarshaller extends StreamingUnmarshaller {
+
+        CustomSkipUnmarshaller(Map<Class<?>, String> types) {
+            super(types);
+        }
+
+        @Override
+        protected void skipDocumentStart(int skipDepth) throws XMLStreamException {
+            super.skipDocumentStart(skipDepth);
+            // Only possible because xmlReader is protected, like xmlWriter on StreamingMarshaller
+            if (this.xmlReader == null || !this.xmlReader.hasNext()) {
+                throw new XMLStreamException("Expected the reader to be usable after skipping the document start");
+            }
+        }
+
     }
 
 }

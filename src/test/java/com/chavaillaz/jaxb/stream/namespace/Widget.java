@@ -1,11 +1,12 @@
 package com.chavaillaz.jaxb.stream.namespace;
 
+import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
+
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
-import lombok.Data;
 
-import static jakarta.xml.bind.annotation.XmlAccessType.FIELD;
+import lombok.Data;
 
 /**
  * No explicit namespace: inherits the package's {@code urn:example:widgets} default via {@code "##default"}.

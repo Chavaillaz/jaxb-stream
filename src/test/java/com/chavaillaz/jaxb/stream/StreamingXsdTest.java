@@ -6,10 +6,14 @@ import com.chavaillaz.jaxb.stream.schema.Metrics;
 import com.chavaillaz.jaxb.stream.schema.ProcessorType;
 import com.sun.management.OperatingSystemMXBean;
 import jakarta.xml.bind.annotation.XmlRootElement;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -27,12 +31,18 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (it is not possible to add {@link XmlRootElement} annotations to all elements),
  * you have to specify the XML tag names when writing to or reading from an XML file.
  */
+@DisplayName("Streaming with XJC-generated classes")
 class StreamingXsdTest {
 
+    @TempDir
+    Path tempDir;
+
     @Test
+    @DisplayName("Writing then reading back metrics generated from an XSD schema gives the same data")
     void testSuccessfulWritingAndReadingFromXsd() throws Exception {
-        List<Object> writtenMetrics = writeMetrics(FILE_NAME);
-        List<Object> readMetrics = readMetrics(FILE_NAME);
+        File file = tempDir.resolve(FILE_NAME).toFile();
+        List<Object> writtenMetrics = writeMetrics(file);
+        List<Object> readMetrics = readMetrics(file);
 
         assertThat(writtenMetrics).usingRecursiveComparison()
                 .withEqualsForType(Double::equals, Double.class)
@@ -42,9 +52,9 @@ class StreamingXsdTest {
                 .isEqualTo(readMetrics);
     }
 
-    private List<Object> writeMetrics(String fileName) throws Exception {
+    private List<Object> writeMetrics(File file) throws Exception {
         try (StreamingMarshaller marshaller = new StreamingMarshaller(Metrics.class)) {
-            marshaller.open(new FileOutputStream(fileName));
+            marshaller.open(new FileOutputStream(file));
 
             MemoryType memoryMetric = new MemoryType();
             memoryMetric.setFreeMemory(getRuntime().freeMemory());
@@ -63,7 +73,7 @@ class StreamingXsdTest {
         }
     }
 
-    private List<Object> readMetrics(String fileName) throws Exception {
+    private List<Object> readMetrics(File file) throws Exception {
         List<Object> metrics = new ArrayList<>();
         Map<Class<?>, String> types = Map.of(
                 DiskType.class, "disk",
@@ -72,12 +82,11 @@ class StreamingXsdTest {
         );
 
         try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(types)) {
-            unmarshaller.open(new FileInputStream(fileName));
+            unmarshaller.open(new FileInputStream(file));
             unmarshaller.iterate((type, element) -> metrics.add(element));
         }
 
         return metrics;
     }
-
 
 }

@@ -3,14 +3,18 @@ package com.chavaillaz.jaxb.stream;
 import com.chavaillaz.jaxb.stream.metric.MemoryMetric;
 import com.chavaillaz.jaxb.stream.metric.Metric;
 import com.chavaillaz.jaxb.stream.metric.ProcessorMetric;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import javax.xml.stream.XMLStreamException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -24,9 +28,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * the document root, as well as {@code skipDepth} edge values (zero, or deeper than the
  * document actually is).
  */
+@DisplayName("Complex XML structure and skipDepth handling")
 class StreamingComplexStructureTest {
 
     public static final String FILE_NAME = "metrics-nested.xml";
+
+    @TempDir
+    Path tempDir;
 
     /**
      * Wraps the usual {@code metrics} container in an additional {@code envelope} element.
@@ -46,11 +54,16 @@ class StreamingComplexStructureTest {
 
     }
 
+    private File file() {
+        return tempDir.resolve(FILE_NAME).toFile();
+    }
+
     @Test
+    @DisplayName("Reading a container nested one level deeper than the root works with the matching skipDepth")
     void testWritingAndReadingNestedContainer() throws Exception {
         List<Metric> writtenMetrics = new ArrayList<>();
         try (NestedMarshaller marshaller = new NestedMarshaller("metrics")) {
-            marshaller.open(new FileOutputStream(FILE_NAME));
+            marshaller.open(new FileOutputStream(file()));
 
             MemoryMetric memory = new MemoryMetric();
             marshaller.write(MemoryMetric.class, memory);
@@ -68,7 +81,7 @@ class StreamingComplexStructureTest {
         );
         try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(types)) {
             // The envelope and the metrics container both need to be skipped
-            unmarshaller.open(new FileInputStream(FILE_NAME), 2);
+            unmarshaller.open(new FileInputStream(file()), 2);
             unmarshaller.iterate((type, element) -> readMetrics.add((Metric) element));
         }
 
@@ -76,21 +89,23 @@ class StreamingComplexStructureTest {
     }
 
     @Test
+    @DisplayName("A skipDepth too shallow for a nested container fails to locate the elements")
     void testWrongSkipDepthFailsToLocateElements() throws Exception {
         try (NestedMarshaller marshaller = new NestedMarshaller("metrics")) {
-            marshaller.open(new FileOutputStream(FILE_NAME));
+            marshaller.open(new FileOutputStream(file()));
             marshaller.write(MemoryMetric.class, new MemoryMetric());
         }
 
         Map<Class<?>, String> types = Map.of(MemoryMetric.class, "memory");
         try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(types)) {
             // Only the envelope is skipped, the metrics container is not
-            unmarshaller.open(new FileInputStream(FILE_NAME), 1);
+            unmarshaller.open(new FileInputStream(file()), 1);
             assertThrows(XMLStreamException.class, unmarshaller::getNextType);
         }
     }
 
     @Test
+    @DisplayName("A skipDepth deeper than the document fails to open and leaves the unmarshaller not-open")
     void testExcessiveSkipDepthLeavesUnmarshallerNotOpen() throws Exception {
         // Only 2 levels of nesting, no text content to trip nextTag() early -
         // forces it to run past the actual end of the document
@@ -105,6 +120,7 @@ class StreamingComplexStructureTest {
     }
 
     @Test
+    @DisplayName("A skipDepth of zero treats the root element itself as the first item")
     void testSkipDepthZeroTreatsRootElementAsFirstItem() throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {

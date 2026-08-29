@@ -29,6 +29,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getAnnotation;
+import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getNamespace;
 import static javax.xml.stream.XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES;
 import static javax.xml.stream.XMLInputFactory.SUPPORT_DTD;
 import static javax.xml.stream.XMLStreamConstants.*;
@@ -110,21 +111,26 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
      * Creates a new streaming unmarshaller reading elements from the given types.
      * Please note that the given classes need the {@link XmlRootElement} annotation.
      * The underlying JAXB {@link Unmarshaller} for each type is created lazily, on first use.
+     * The expected tag name is qualified with the type's effective namespace (see
+     * {@link StreamingMarshaller#getNamespace(Class)}) when it has one, matching what JAXB itself
+     * would use when marshalling the type on its own.
      *
      * @param types The list of element types that will be read by the unmarshaller
      * @throws IllegalArgumentException if the {@link XmlRootElement} annotation is missing for the given types
      */
     public StreamingUnmarshaller(Class<?>... types) {
         for (Class<?> type : types) {
-            String key = getAnnotation(type, XmlRootElement.class).name();
-            this.mapType.put(key, type);
+            String name = getAnnotation(type, XmlRootElement.class).name();
+            QName key = new QName(getNamespace(type), name);
+            this.mapType.put(key.toString(), type);
         }
     }
 
     /**
      * Creates a new streaming unmarshaller reading elements from the given types.
      * Please note that the {@link Map} has to contain each type with its XML tag name
-     * (equivalent to the value in {@link XmlRootElement} or {@link XmlElement})
+     * (equivalent to the value in {@link XmlRootElement} or {@link XmlElement}). A namespaced tag name
+     * can be given in the {@code {namespaceURI}localName} format (see {@link QName#valueOf(String)}).
      * The underlying JAXB {@link Unmarshaller} for each type is created lazily, on first use.
      *
      * @param types The list of elements types with their name that will be read by the unmarshaller

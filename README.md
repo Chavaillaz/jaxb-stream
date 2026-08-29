@@ -154,6 +154,23 @@ try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric
 
 The same `setSchema` method is available on `StreamingMarshaller` to validate elements while writing them.
 
+### Namespace support
+
+When a type's `@XmlRootElement` declares a namespace (or inherits one from its package's `@XmlSchema`),
+both `StreamingMarshaller.write(Class, Object)` and the `StreamingUnmarshaller(Class...)` constructor
+resolve it automatically the same way JAXB itself would, so writing and reading namespaced elements works
+without any extra configuration:
+
+```java
+// @XmlRootElement(name = "memory") in a package annotated @XmlSchema(namespace = "urn:example:metrics")
+marshaller.write(MemoryMetric.class, metric); // written as <memory xmlns="urn:example:metrics">
+new StreamingUnmarshaller(MemoryMetric.class); // correctly expects that same namespace when reading
+```
+
+For classes without `@XmlRootElement` (or to use a namespace not declared on the type itself), give the
+tag name in the `{namespaceURI}localName` format instead, both when writing with
+`write(Class, String, Object)` and when reading with the `Map`-based `StreamingUnmarshaller` constructor.
+
 ### Resilient reading
 
 By default, an element that fails to unmarshal (invalid data, or data rejected by a schema given to

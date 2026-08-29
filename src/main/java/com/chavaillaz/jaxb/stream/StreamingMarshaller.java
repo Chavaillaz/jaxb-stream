@@ -8,6 +8,7 @@ import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Marshaller;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
+import jakarta.xml.bind.annotation.XmlSchema;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
@@ -131,6 +132,26 @@ public class StreamingMarshaller implements Closeable {
     }
 
     /**
+     * Gets the effective XML namespace of the given type's {@link XmlRootElement} annotation, resolving
+     * {@code "##default"} the same way JAXB itself does: to the namespace declared on the {@link XmlSchema}
+     * annotation of the type's package ({@code package-info.java}), or no namespace if there is none.
+     *
+     * @param type The type to resolve the namespace for
+     * @return The effective namespace, or an empty string if the type has none
+     * @throws IllegalArgumentException if the given type does not have the {@link XmlRootElement} annotation
+     */
+    protected static String getNamespace(Class<?> type) {
+        String namespace = getAnnotation(type, XmlRootElement.class).namespace();
+        if (!"##default".equals(namespace)) {
+            return namespace;
+        }
+
+        Package pkg = type.getPackage();
+        XmlSchema packageSchema = pkg == null ? null : pkg.getAnnotation(XmlSchema.class);
+        return packageSchema == null ? "" : packageSchema.namespace();
+    }
+
+    /**
      * Opens the given output stream in which the XML file has to be written.
      * It creates the beginning of the document with XML definition and the root element.
      * If an output stream is already open, it closes it before opening the new one.
@@ -187,6 +208,8 @@ public class StreamingMarshaller implements Closeable {
      * Writes the given element in XML to the output stream.
      * Please note that the object has to have the {@link XmlRootElement} annotation,
      * otherwise please use the method {@link #write(Class, String, Object)}.
+     * The tag name written is qualified with the type's effective namespace (see {@link #getNamespace(Class)})
+     * when it has one, matching what JAXB itself would use when marshalling the type on its own.
      *
      * @param type   The type of the given {@code object}
      * @param object The element to marshal and write
@@ -197,11 +220,14 @@ public class StreamingMarshaller implements Closeable {
      */
     public synchronized <T> void write(Class<T> type, T object) throws JAXBException {
         XmlRootElement annotation = getAnnotation(type, XmlRootElement.class);
-        write(type, annotation.name(), object);
+        QName name = new QName(getNamespace(type), annotation.name());
+        write(type, name.toString(), object);
     }
 
     /**
      * Writes the given element in XML to the output stream.
+     * The tag name can be given in the {@code {namespaceURI}localName} format (see {@link QName#valueOf(String)})
+     * to write it in a namespace.
      *
      * @param type   The type of the given {@code object}
      * @param name   The tag name of the XML element described in {@link XmlRootElement} or {@link XmlElement}

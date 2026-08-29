@@ -7,6 +7,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.stream.XMLStreamException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -173,6 +177,86 @@ class StreamingComplexStructureTest {
             unmarshaller.open(new ByteArrayInputStream(output.toByteArray()), 0);
             assertThat(unmarshaller.hasNext()).isTrue();
             assertThrows(XMLStreamException.class, unmarshaller::getNextType);
+        }
+    }
+
+    @Test
+    @DisplayName("openChild() writes multiple sibling containers, each with its own elements")
+    void testOpenChildWritesSiblingContainers() throws Exception {
+        MemoryMetric memory1 = new MemoryMetric();
+        MemoryMetric memory2 = new MemoryMetric();
+        ProcessorMetric processor = new ProcessorMetric();
+
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("root")) {
+            marshaller.open(new FileOutputStream(file()));
+
+            try (StreamingMarshaller memories = marshaller.openChild("memories")) {
+                memories.write(MemoryMetric.class, memory1);
+                memories.write(MemoryMetric.class, memory2);
+            }
+
+            try (StreamingMarshaller processors = marshaller.openChild("processors")) {
+                processors.write(ProcessorMetric.class, processor);
+            }
+        }
+
+        // Verified independently of the unmarshaller's own sequential-skip semantics, since a document
+        // with multiple sibling containers at the same depth is not something a single flat skipDepth
+        // can read back in one pass
+        Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file());
+        Element root = document.getDocumentElement();
+        assertThat(root.getTagName()).isEqualTo("root");
+
+        Element memories = (Element) root.getElementsByTagName("memories").item(0);
+        assertThat(memories.getElementsByTagName("memory").getLength()).isEqualTo(2);
+
+        Element processors = (Element) root.getElementsByTagName("processors").item(0);
+        assertThat(processors.getElementsByTagName("processor").getLength()).isEqualTo(1);
+
+        // Each container also round-trips correctly on its own
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class)) {
+            unmarshaller.open(new FileInputStream(file()), 2);
+            assertThat(unmarshaller.next(MemoryMetric.class)).isEqualTo(memory1);
+            assertThat(unmarshaller.next(MemoryMetric.class)).isEqualTo(memory2);
+        }
+    }
+
+    @Test
+    @DisplayName("openChild() nesting can go arbitrarily deep")
+    void testOpenChildNestingIsArbitrarilyDeep() throws Exception {
+        MemoryMetric memory = new MemoryMetric();
+
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("root")) {
+            marshaller.open(new FileOutputStream(file()));
+            try (StreamingMarshaller level1 = marshaller.openChild("level1")) {
+                try (StreamingMarshaller level2 = level1.openChild("level2")) {
+                    level2.write(MemoryMetric.class, memory);
+                }
+            }
+        }
+
+        Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file());
+        Element root = document.getDocumentElement();
+        Element level1 = (Element) root.getElementsByTagName("level1").item(0);
+        Element level2 = (Element) level1.getElementsByTagName("level2").item(0);
+        assertThat(level2.getElementsByTagName("memory").getLength()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("openChild() cannot be called before this marshaller is open")
+    void testOpenChildBeforeOpenThrowsIllegalState() {
+        StreamingMarshaller marshaller = new StreamingMarshaller("root");
+        assertThrows(IllegalStateException.class, () -> marshaller.openChild("child"));
+    }
+
+    @Test
+    @DisplayName("A nested container returned by openChild() cannot be opened on its own")
+    void testOpenOnChildContainerThrowsIllegalState() throws Exception {
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("root")) {
+            marshaller.open(new FileOutputStream(file()));
+            try (StreamingMarshaller child = marshaller.openChild("child")) {
+                assertThrows(IllegalStateException.class, () -> child.open(new ByteArrayOutputStream()));
+            }
         }
     }
 

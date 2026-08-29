@@ -204,11 +204,35 @@ try (StreamingMarshaller marshaller = new StreamingMarshaller(MetricsList.class)
 }
 ```
 
+### Nested containers
+
+If the elements to write are not all direct children of the root element — for example several lists of
+different element types, each wrapped in its own container — use `openChild` to write into a nested container
+without subclassing anything. The returned marshaller shares the same underlying stream and only closes its
+own container tag, not the whole document, so it can be closed independently (typically with its own
+try-with-resources block) and nesting can go arbitrarily deep:
+
+```java
+try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
+    marshaller.open(new FileOutputStream(fileName));
+
+    try (StreamingMarshaller memoryMetrics = marshaller.openChild("memory")) {
+        memoryMetrics.write(MemoryMetric.class, new MemoryMetric());
+        ...
+    }
+
+    try (StreamingMarshaller processorMetrics = marshaller.openChild("processor")) {
+        processorMetrics.write(ProcessorMetric.class, new ProcessorMetric());
+        ...
+    }
+}
+```
+
 ### Complex XML file structure
 
-If the XML file you would like to create or read has a complex structure (meaning the stream of elements to read
-is not present right after the root tag), you have the possibility to extends both marshaller and unmarshaller and
-override the following methods:
+For anything `openChild` doesn't cover — reading back a nested structure, or customizing the very start/end
+of the document itself (an XML declaration with extra attributes, a namespace declaration on the root, ...) —
+you have the possibility to extend both marshaller and unmarshaller and override the following methods:
 
 - `createDocumentStart` in `StreamingMarshaller` to write the start of the XML file before the stream of elements
 - `close` in `StreamingMarshaller` to write the end of the XML file (note that tags are closed automatically)

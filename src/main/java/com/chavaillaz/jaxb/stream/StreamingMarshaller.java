@@ -51,6 +51,10 @@ import static org.codehaus.stax2.XMLOutputFactory2.P_AUTOMATIC_EMPTY_ELEMENTS;
  * against an XSD schema while writing them, {@link #setCharset(Charset)} to write in a charset other than
  * UTF-8, or {@link #setPrettyPrint(boolean)} to disable the indentation applied by default.
  * <p>
+ * For XML files with more than one level of nested containers, use {@link #openChild(String)} to write into
+ * a nested container without having to subclass {@link #createDocumentStart()} with the whole structure
+ * hardcoded in it.
+ * <p>
  * Don't forget to open the stream before trying to write in it.
  */
 @Slf4j
@@ -91,6 +95,13 @@ public class StreamingMarshaller implements Closeable {
      * or {@code null} to disable validation (default).
      */
     private @Nullable Schema schema;
+
+    /**
+     * Whether this instance is a nested container created by {@link #openChild(String)}: it shares its
+     * parent's {@link #xmlWriter} instead of owning one, so {@link #close()} only closes its own container
+     * tag instead of the whole document, and {@link #open(OutputStream)} is not allowed on it.
+     */
+    private boolean childContainer = false;
 
     /**
      * Creates a new streaming marshaller writing elements in the given root element class.
@@ -159,10 +170,17 @@ public class StreamingMarshaller implements Closeable {
      * disabled with {@link #setPrettyPrint(boolean)}.
      *
      * @param outputStream The output stream in which write the XML elements
-     * @throws XMLStreamException if an error was encountered while starting the XML document with the root element,
-     *                             in which case this instance is left in the same not-open state as before this call
+     * @throws IllegalStateException if this instance is a nested container returned by {@link #openChild(String)}
+     * @throws XMLStreamException    if an error was encountered while starting the XML document with the root
+     *                                element, in which case this instance is left in the same not-open state
+     *                                as before this call
      */
     public synchronized void open(OutputStream outputStream) throws XMLStreamException {
+        if (this.childContainer) {
+            throw new IllegalStateException("This marshaller is a nested container returned by openChild(String); "
+                    + "it shares its parent's stream and cannot be opened on its own");
+        }
+
         if (this.xmlWriter != null) {
             close();
         }
@@ -202,6 +220,40 @@ public class StreamingMarshaller implements Closeable {
     protected void createDocumentStart() throws XMLStreamException {
         this.xmlWriter.writeStartDocument();
         this.xmlWriter.writeStartElement(this.rootElement);
+    }
+
+    /**
+     * Opens a nested container element within this marshaller's own stream, returning a new marshaller that
+     * writes into the same underlying stream, wrapped in the given container element. Useful for XML
+     * structures with more than one level of nested containers, without having to subclass
+     * {@link #createDocumentStart()} with the whole structure hardcoded in it.
+     * <p>
+     * The returned marshaller has to be closed independently (typically with its own try-with-resources
+     * block) before writing anything else with this one. Unlike {@link #close()} on a top-level marshaller,
+     * closing it only writes its own closing tag: it does not end the document or close the underlying
+     * stream, both of which remain owned by this marshaller (or whichever ancestor originally called
+     * {@link #open(OutputStream)}). Nesting can go arbitrarily deep by calling this method again on the
+     * marshaller it returns.
+     * <p>
+     * As with the rest of this class, a marshaller returned by this method is only safe to use from one
+     * thread at a time — including with respect to its parent and any siblings, since they all share the
+     * same underlying writer.
+     *
+     * @param name The tag name of the container element to open
+     * @return A new marshaller writing into this same stream, nested inside the given container element
+     * @throws IllegalStateException if this stream has not been opened yet
+     * @throws XMLStreamException    if an error was encountered while writing the container's start tag
+     */
+    public synchronized StreamingMarshaller openChild(String name) throws XMLStreamException {
+        if (this.xmlWriter == null) {
+            throw new IllegalStateException("The stream has not been opened yet, please call open(OutputStream) first");
+        }
+
+        StreamingMarshaller child = new StreamingMarshaller(name);
+        child.xmlWriter = this.xmlWriter;
+        child.childContainer = true;
+        child.xmlWriter.writeStartElement(name);
+        return child;
     }
 
     /**
@@ -311,21 +363,30 @@ public class StreamingMarshaller implements Closeable {
     }
 
     /**
-     * Writes the closing tag, closes the stream and the underlying output stream given in {@link #open(OutputStream)}.
+     * Closes the stream. For a top-level marshaller, this writes the closing tag, ends the document and
+     * closes the underlying output stream given in {@link #open(OutputStream)}. For a nested container
+     * returned by {@link #openChild(String)}, this only writes its own closing tag: the document, the
+     * underlying writer and the underlying stream all remain open, owned by an ancestor marshaller.
      */
     @Override
     public synchronized void close() {
         try {
             if (this.xmlWriter != null) {
-                this.xmlWriter.writeCharacters("\n");
-                this.xmlWriter.writeEndDocument();
-                this.xmlWriter.close();
+                if (this.childContainer) {
+                    this.xmlWriter.writeEndElement();
+                } else {
+                    this.xmlWriter.writeCharacters("\n");
+                    this.xmlWriter.writeEndDocument();
+                    this.xmlWriter.close();
+                }
             }
         } catch (XMLStreamException e) {
             log.error("Unable to close XML stream writer", e);
         } finally {
             this.xmlWriter = null;
-            closeOutputStream();
+            if (!this.childContainer) {
+                closeOutputStream();
+            }
         }
     }
 

@@ -218,9 +218,14 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
      * file structure complexity.
      *
      * @param skipDepth The number of containers to skip before reaching the stream of desired elements
-     * @throws XMLStreamException if an error was encountered while skipping tags
+     * @throws IllegalStateException if the stream has not been opened yet
+     * @throws XMLStreamException    if an error was encountered while skipping tags
      */
     protected void skipDocumentStart(int skipDepth) throws XMLStreamException {
+        if (this.xmlReader == null) {
+            throw new IllegalStateException("The stream has not been opened yet, please call open(InputStream) first");
+        }
+
         // Ignore headers
         skipElements(START_DOCUMENT, DTD);
 
@@ -237,9 +242,14 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
      * Skips the given event types.
      *
      * @param elements The event types to ignore
-     * @throws XMLStreamException if an error was encountered while skipping the elements
+     * @throws IllegalStateException if the stream has not been opened yet
+     * @throws XMLStreamException    if an error was encountered while skipping the elements
      */
     protected void skipElements(Integer... elements) throws XMLStreamException {
+        if (this.xmlReader == null) {
+            throw new IllegalStateException("The stream has not been opened yet, please call open(InputStream) first");
+        }
+
         int eventType = this.xmlReader.getEventType();
 
         List<Integer> types = Arrays.asList(elements);

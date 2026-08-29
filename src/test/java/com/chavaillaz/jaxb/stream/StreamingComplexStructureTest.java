@@ -231,6 +231,10 @@ class StreamingComplexStructureTest {
 
         @Override
         protected void createDocumentStart() throws XMLStreamException {
+            if (this.xmlWriter == null) {
+                throw new IllegalStateException("The stream has not been opened yet, please call open(OutputStream) first");
+            }
+
             this.xmlWriter.writeStartDocument();
             this.xmlWriter.writeStartElement("envelope");
             this.xmlWriter.writeStartElement(this.rootElement);

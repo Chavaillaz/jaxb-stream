@@ -215,9 +215,14 @@ public class StreamingMarshaller implements Closeable {
      * Creates the beginning of the document (until we reach where to write the stream of elements).
      * Override this method if you have a more complex structure in the XML file to create.
      *
-     * @throws XMLStreamException if an error was encountered while starting the XML document with the root element
+     * @throws IllegalStateException if the stream has not been opened yet
+     * @throws XMLStreamException    if an error was encountered while starting the XML document with the root element
      */
     protected void createDocumentStart() throws XMLStreamException {
+        if (this.xmlWriter == null) {
+            throw new IllegalStateException("The stream has not been opened yet, please call open(OutputStream) first");
+        }
+
         this.xmlWriter.writeStartDocument();
         this.xmlWriter.writeStartElement(this.rootElement);
     }

@@ -167,7 +167,7 @@ class StreamingTest {
 
         @Override
         public void close() throws IOException {
-            closed = true;
+            this.closed = true;
             super.close();
         }
 
@@ -183,7 +183,7 @@ class StreamingTest {
 
         @Override
         public void close() throws IOException {
-            closed = true;
+            this.closed = true;
             super.close();
         }
 

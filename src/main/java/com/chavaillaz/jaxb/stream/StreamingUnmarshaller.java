@@ -11,11 +11,14 @@ import javax.xml.namespace.QName;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
+import javax.xml.validation.Schema;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 import java.util.function.BiConsumer;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getAnnotation;
 import static javax.xml.stream.XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES;
@@ -23,10 +26,10 @@ import static javax.xml.stream.XMLInputFactory.SUPPORT_DTD;
 import static javax.xml.stream.XMLStreamConstants.*;
 
 /**
- * JAXB unmarshaller using streaming to read XML from the given output stream.
+ * JAXB unmarshaller using streaming to read XML from the given input stream.
  * <p>
  * This library allows you to extract a list of elements (even from different types, but with same parent) item by item.
- * The goal is to avoid loading a huge amount of data into memory when writing large files.
+ * The goal is to avoid loading a huge amount of data into memory when reading large files.
  * <p>
  * This unmarshaller works the following way:
  * <ul>
@@ -44,15 +47,23 @@ import static javax.xml.stream.XMLStreamConstants.*;
  * <pre>
  *     unmarshaller.iterate((type, element) -&gt; doSomething(element));
  * </pre>
+ * or, since it is also {@link Iterable}, with a for-each loop or the {@link #stream()} method:
+ * <pre>
+ *     for (Object element : unmarshaller) {
+ *         doSomething(element);
+ *     }
+ *     unmarshaller.stream().forEach(element -&gt; doSomething(element));
+ * </pre>
  * Don't forget to open the stream before trying to read in it.
  */
 @Slf4j
-public class StreamingUnmarshaller implements Closeable {
+public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
 
     private final Map<Class<?>, Unmarshaller> unmarshallerCache = new HashMap<>();
     private final Map<String, Class<?>> mapType = new HashMap<>();
     private XMLStreamReader xmlReader;
     private InputStream inputStream;
+    private Schema schema;
 
     /**
      * Creates a new streaming unmarshaller reading elements from the given types.
@@ -65,7 +76,7 @@ public class StreamingUnmarshaller implements Closeable {
     public StreamingUnmarshaller(Class<?>... types) {
         for (Class<?> type : types) {
             String key = getAnnotation(type, XmlRootElement.class).name();
-            mapType.put(key, type);
+            this.mapType.put(key, type);
         }
     }
 
@@ -79,7 +90,7 @@ public class StreamingUnmarshaller implements Closeable {
      */
     public StreamingUnmarshaller(Map<Class<?>, String> types) {
         for (Map.Entry<Class<?>, String> entry : types.entrySet()) {
-            mapType.put(entry.getValue(), entry.getKey());
+            this.mapType.put(entry.getValue(), entry.getKey());
         }
     }
 
@@ -106,7 +117,7 @@ public class StreamingUnmarshaller implements Closeable {
      * @throws XMLStreamException if an error was encountered while creating the reader or while skipping tags
      */
     public synchronized void open(InputStream inputStream, int skipDepth) throws XMLStreamException {
-        if (xmlReader != null) {
+        if (this.xmlReader != null) {
             close();
         }
 
@@ -115,7 +126,7 @@ public class StreamingUnmarshaller implements Closeable {
         // Deny all access to external references
         factory.setProperty(IS_SUPPORTING_EXTERNAL_ENTITIES, false);
         factory.setProperty(SUPPORT_DTD, false);
-        xmlReader = factory.createXMLStreamReader(inputStream);
+        this.xmlReader = factory.createXMLStreamReader(inputStream);
         skipDocumentStart(skipDepth);
     }
 
@@ -134,7 +145,7 @@ public class StreamingUnmarshaller implements Closeable {
 
         for (int i = 0; i < skipDepth; ++i) {
             // Ignore root element
-            xmlReader.nextTag();
+            this.xmlReader.nextTag();
         }
 
         // If there's no tag, ignore root element's end
@@ -148,23 +159,39 @@ public class StreamingUnmarshaller implements Closeable {
      * @throws XMLStreamException if an error was encountered while skipping the elements
      */
     protected void skipElements(Integer... elements) throws XMLStreamException {
-        int eventType = xmlReader.getEventType();
+        int eventType = this.xmlReader.getEventType();
 
         List<Integer> types = Arrays.asList(elements);
         while (types.contains(eventType)) {
-            eventType = xmlReader.next();
+            eventType = this.xmlReader.next();
         }
     }
 
     /**
-     * Creates a new unmarshaller for the given type.
+     * Sets the XSD schema to validate elements against while unmarshalling them.
+     * Any unmarshaller already created and cached for a type is discarded, so this schema
+     * takes effect for every type handled by this instance, including ones already read before this call.
+     *
+     * @param schema The schema to validate against, or {@code null} to disable validation (default)
+     */
+    public synchronized void setSchema(Schema schema) {
+        this.schema = schema;
+        this.unmarshallerCache.clear();
+    }
+
+    /**
+     * Creates a new unmarshaller for the given type, applying the schema set with {@link #setSchema(Schema)} if any.
      *
      * @param type The type of elements the unmarshaller has to handle
      * @return The unmarshaller created, capable of handling the conversion to the given element type
      * @throws JAXBException if an error was encountered while creating the unmarshaller
      */
     public Unmarshaller createUnmarshaller(Class<?> type) throws JAXBException {
-        return JAXBContext.newInstance(type).createUnmarshaller();
+        Unmarshaller unmarshaller = JAXBContext.newInstance(type).createUnmarshaller();
+        if (this.schema != null) {
+            unmarshaller.setSchema(this.schema);
+        }
+        return unmarshaller;
     }
 
     /**
@@ -175,10 +202,10 @@ public class StreamingUnmarshaller implements Closeable {
      * @throws JAXBException if an error was encountered while creating the unmarshaller
      */
     public synchronized Unmarshaller getUnmarshaller(Class<?> type) throws JAXBException {
-        Unmarshaller unmarshaller = unmarshallerCache.get(type);
+        Unmarshaller unmarshaller = this.unmarshallerCache.get(type);
         if (unmarshaller == null) {
             unmarshaller = createUnmarshaller(type);
-            unmarshallerCache.put(type, unmarshaller);
+            this.unmarshallerCache.put(type, unmarshaller);
         }
         return unmarshaller;
     }
@@ -186,19 +213,21 @@ public class StreamingUnmarshaller implements Closeable {
     /**
      * Gets the type of the next element in the stream.
      *
-     * @return The next type or {@code null} when not found (in that case, add that type at class instantiation)
+     * @return The next type
      * @throws IllegalStateException if the stream has not been opened yet
-     * @throws XMLStreamException    if an error was encountered while detecting the next state
+     * @throws XMLStreamException    if there's no more element to read, or if the next element's tag name is not
+     *                               one of the types given at instantiation (or the {@code skipDepth} parameter
+     *                               given to {@link #open(InputStream, int)} does not match the file structure)
      */
     public synchronized Class<?> getNextType() throws XMLStreamException {
         if (!hasNext()) {
             throw new XMLStreamException("There is no more element to read");
         }
 
-        return Optional.ofNullable(xmlReader)
+        return Optional.ofNullable(this.xmlReader)
                 .map(XMLStreamReader::getName)
                 .map(QName::toString)
-                .map(mapType::get)
+                .map(this.mapType::get)
                 .orElseThrow(() -> new XMLStreamException("Unknown next type in the stream, " +
                         "check given ones in constructor or if skipDepth parameter in open method is correct"));
     }
@@ -221,7 +250,7 @@ public class StreamingUnmarshaller implements Closeable {
         }
 
         Unmarshaller unmarshaller = getUnmarshaller(type);
-        T value = unmarshaller.unmarshal(xmlReader, type).getValue();
+        T value = unmarshaller.unmarshal(this.xmlReader, type).getValue();
 
         skipElements(CHARACTERS, END_ELEMENT);
         return value;
@@ -235,10 +264,10 @@ public class StreamingUnmarshaller implements Closeable {
      * @throws XMLStreamException    if an error was encountered while detecting the next state
      */
     public synchronized boolean hasNext() throws XMLStreamException {
-        if (xmlReader == null) {
+        if (this.xmlReader == null) {
             throw new IllegalStateException("The stream has not been opened yet, please call open(InputStream) first");
         }
-        return xmlReader.hasNext();
+        return this.xmlReader.hasNext();
     }
 
     /**
@@ -257,31 +286,78 @@ public class StreamingUnmarshaller implements Closeable {
     }
 
     /**
+     * Returns an iterator over the remaining elements of the stream, allowing this unmarshaller to be used
+     * in a for-each loop. Checked exceptions ({@link XMLStreamException}, {@link JAXBException}) raised while
+     * reading are wrapped in an {@link UncheckedXmlException}, since {@link Iterator} methods cannot throw them.
+     *
+     * @return An iterator unmarshalling one element per call to {@link Iterator#next()}
+     */
+    @Override
+    public Iterator<Object> iterator() {
+        return new Iterator<>() {
+
+            @Override
+            public boolean hasNext() {
+                try {
+                    return StreamingUnmarshaller.this.hasNext();
+                } catch (XMLStreamException e) {
+                    throw new UncheckedXmlException(e);
+                }
+            }
+
+            @Override
+            public Object next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+
+                try {
+                    return StreamingUnmarshaller.this.next(getNextType());
+                } catch (JAXBException | XMLStreamException e) {
+                    throw new UncheckedXmlException(e);
+                }
+            }
+
+        };
+    }
+
+    /**
+     * Returns a sequential {@link Stream} over the remaining elements of the stream.
+     * Checked exceptions ({@link XMLStreamException}, {@link JAXBException}) raised while reading
+     * are wrapped in an {@link UncheckedXmlException}, since {@link Stream} operations cannot throw them.
+     *
+     * @return A stream unmarshalling one element per element consumed from it
+     */
+    public Stream<Object> stream() {
+        return StreamSupport.stream(spliterator(), false);
+    }
+
+    /**
      * Closes the stream and the underlying input stream given in {@link #open(InputStream)}.
      */
     @Override
     public synchronized void close() {
         try {
-            if (xmlReader != null) {
-                xmlReader.close();
+            if (this.xmlReader != null) {
+                this.xmlReader.close();
             }
         } catch (XMLStreamException e) {
             log.error("Unable to close XML stream reader", e);
         } finally {
-            xmlReader = null;
+            this.xmlReader = null;
             closeInputStream();
         }
     }
 
     private void closeInputStream() {
         try {
-            if (inputStream != null) {
-                inputStream.close();
+            if (this.inputStream != null) {
+                this.inputStream.close();
             }
         } catch (IOException e) {
             log.error("Unable to close underlying input stream", e);
         } finally {
-            inputStream = null;
+            this.inputStream = null;
         }
     }
 

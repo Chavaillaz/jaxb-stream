@@ -39,9 +39,9 @@ public class ProcessorMetric implements Metric {
      */
     public ProcessorMetric() {
         OperatingSystemMXBean bean = (OperatingSystemMXBean) getOperatingSystemMXBean();
-        availableProcessors = bean.getAvailableProcessors();
-        systemLoad = bean.getSystemCpuLoad();
-        processLoad = bean.getProcessCpuLoad();
+        this.availableProcessors = bean.getAvailableProcessors();
+        this.systemLoad = bean.getSystemCpuLoad();
+        this.processLoad = bean.getProcessCpuLoad();
     }
 
     @Override

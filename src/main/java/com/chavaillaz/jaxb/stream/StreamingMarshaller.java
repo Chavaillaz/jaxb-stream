@@ -1,6 +1,5 @@
 package com.chavaillaz.jaxb.stream;
 
-import static org.codehaus.stax2.XMLOutputFactory2.P_AUTOMATIC_EMPTY_ELEMENTS;
 import com.ctc.wstx.stax.WstxOutputFactory;
 import com.sun.xml.txw2.output.IndentingXMLStreamWriter;
 import jakarta.xml.bind.JAXBContext;
@@ -15,15 +14,19 @@ import lombok.extern.slf4j.Slf4j;
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
+import javax.xml.validation.Schema;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
 import static jakarta.xml.bind.Marshaller.JAXB_FRAGMENT;
 import static java.lang.Boolean.TRUE;
+import static org.codehaus.stax2.XMLOutputFactory2.P_AUTOMATIC_EMPTY_ELEMENTS;
 
 /**
  * JAXB marshaller using streaming to write XML into the given output stream.
@@ -42,15 +45,35 @@ import static java.lang.Boolean.TRUE;
  * <pre>
  *     marshaller.write(YourObject.class, new YourObject());
  * </pre>
+ * Before opening the stream, you can also configure it with {@link #setSchema(Schema)} to validate elements
+ * against an XSD schema while writing them, {@link #setCharset(Charset)} to write in a charset other than
+ * UTF-8, or {@link #setPrettyPrint(boolean)} to disable the indentation applied by default.
+ * <p>
  * Don't forget to open the stream before trying to write in it.
  */
 @Slf4j
 public class StreamingMarshaller implements Closeable {
 
     private final Map<Class<?>, Marshaller> marshallerCache = new HashMap<>();
+
+    /**
+     * The tag name of the XML container element in which the written elements are stored.
+     */
     protected final String rootElement;
+
+    /**
+     * The writer used to write the XML document, {@code null} until {@link #open(OutputStream)} is called.
+     */
     protected XMLStreamWriter xmlWriter;
+
+    /**
+     * The output stream given to {@link #open(OutputStream)}, {@code null} until then.
+     */
     protected OutputStream outputStream;
+
+    private Charset charset = StandardCharsets.UTF_8;
+    private boolean prettyPrint = true;
+    private Schema schema;
 
     /**
      * Creates a new streaming marshaller writing elements in the given root element class.
@@ -58,6 +81,7 @@ public class StreamingMarshaller implements Closeable {
      *
      * @param type The root class defining the XML container where to store the elements to write
      * @throws IllegalArgumentException if the {@link XmlRootElement} annotation is missing for the given type
+     * @throws NullPointerException     if the given type is {@code null}
      */
     public StreamingMarshaller(@NonNull Class<?> type) {
         this.rootElement = getAnnotation(type, XmlRootElement.class).name();
@@ -67,11 +91,21 @@ public class StreamingMarshaller implements Closeable {
      * Creates a new streaming marshaller writing elements in the given root element.
      *
      * @param rootElement The root used as XML container where to store the elements to write
+     * @throws NullPointerException if the given root element is {@code null}
      */
     public StreamingMarshaller(@NonNull String rootElement) {
         this.rootElement = rootElement;
     }
 
+    /**
+     * Gets the given annotation from the given type, failing if it is not present.
+     *
+     * @param type           The type to look the annotation up on
+     * @param annotationType The type of annotation to look up
+     * @param <A>            The annotation type
+     * @return The annotation instance found on the given type
+     * @throws IllegalArgumentException if the given type does not have the given annotation
+     */
     protected static <A extends Annotation> A getAnnotation(Class<?> type, Class<A> annotationType) {
         A annotation = type.getAnnotation(annotationType);
         if (annotation == null) {
@@ -84,19 +118,22 @@ public class StreamingMarshaller implements Closeable {
      * Opens the given output stream in which the XML file has to be written.
      * It creates the beginning of the document with XML definition and the root element.
      * If an output stream is already open, it closes it before opening the new one.
+     * Uses the charset set with {@link #setCharset(Charset)} (UTF-8 by default) and is indented unless
+     * disabled with {@link #setPrettyPrint(boolean)}.
      *
      * @param outputStream The output stream in which write the XML elements
      * @throws XMLStreamException if an error was encountered while starting the XML document with the root element
      */
     public synchronized void open(OutputStream outputStream) throws XMLStreamException {
-        if (xmlWriter != null) {
+        if (this.xmlWriter != null) {
             close();
         }
 
         this.outputStream = outputStream;
         WstxOutputFactory wstxOutputFactory = new WstxOutputFactory();
         wstxOutputFactory.setProperty(P_AUTOMATIC_EMPTY_ELEMENTS, true);
-        xmlWriter = new IndentingXMLStreamWriter(wstxOutputFactory.createXMLStreamWriter(outputStream, "UTF-8"));
+        XMLStreamWriter writer = wstxOutputFactory.createXMLStreamWriter(outputStream, this.charset.name());
+        this.xmlWriter = this.prettyPrint ? new IndentingXMLStreamWriter(writer) : writer;
         createDocumentStart();
     }
 
@@ -107,8 +144,8 @@ public class StreamingMarshaller implements Closeable {
      * @throws XMLStreamException if an error was encountered while starting the XML document with the root element
      */
     protected void createDocumentStart() throws XMLStreamException {
-        xmlWriter.writeStartDocument();
-        xmlWriter.writeStartElement(rootElement);
+        this.xmlWriter.writeStartDocument();
+        this.xmlWriter.writeStartElement(this.rootElement);
     }
 
     /**
@@ -119,7 +156,8 @@ public class StreamingMarshaller implements Closeable {
      * @param type   The type of the given {@code object}
      * @param object The element to marshal and write
      * @param <T>    The element type
-     * @throws JAXBException if an error was encountered while marshalling the given object
+     * @throws IllegalArgumentException if the {@link XmlRootElement} annotation is missing on the given type
+     * @throws JAXBException            if an error was encountered while marshalling the given object
      */
     public synchronized <T> void write(Class<T> type, T object) throws JAXBException {
         XmlRootElement annotation = getAnnotation(type, XmlRootElement.class);
@@ -137,7 +175,7 @@ public class StreamingMarshaller implements Closeable {
      */
     public synchronized <T> void write(Class<T> type, String name, T object) throws JAXBException {
         JAXBElement<T> element = new JAXBElement<>(QName.valueOf(name), type, object);
-        getMarshaller(type).marshal(element, xmlWriter);
+        getMarshaller(type).marshal(element, this.xmlWriter);
     }
 
     /**
@@ -149,16 +187,16 @@ public class StreamingMarshaller implements Closeable {
      * @throws JAXBException if an error was encountered while creating the marshaller
      */
     public synchronized <T> Marshaller getMarshaller(Class<T> type) throws JAXBException {
-        Marshaller marshaller = marshallerCache.get(type);
+        Marshaller marshaller = this.marshallerCache.get(type);
         if (marshaller == null) {
             marshaller = createMarshaller(type);
-            marshallerCache.put(type, marshaller);
+            this.marshallerCache.put(type, marshaller);
         }
         return marshaller;
     }
 
     /**
-     * Creates a new marshaller for the given type.
+     * Creates a new marshaller for the given type, applying the schema set with {@link #setSchema(Schema)} if any.
      *
      * @param type The type of elements the marshaller has to handle
      * @return The marshaller created, capable of handling the conversion of the given element type
@@ -168,7 +206,41 @@ public class StreamingMarshaller implements Closeable {
         JAXBContext context = JAXBContext.newInstance(type);
         Marshaller marshaller = context.createMarshaller();
         marshaller.setProperty(JAXB_FRAGMENT, TRUE);
+        if (this.schema != null) {
+            marshaller.setSchema(this.schema);
+        }
         return marshaller;
+    }
+
+    /**
+     * Sets the XSD schema to validate elements against while marshalling them.
+     * Any marshaller already created and cached for a type is discarded, so this schema takes effect
+     * for every type handled by this instance, including ones already written before this call.
+     *
+     * @param schema The schema to validate against, or {@code null} to disable validation (default)
+     */
+    public synchronized void setSchema(Schema schema) {
+        this.schema = schema;
+        this.marshallerCache.clear();
+    }
+
+    /**
+     * Sets the charset used to write the XML output. Has to be called before {@link #open(OutputStream)}.
+     *
+     * @param charset The charset to use (UTF-8 by default)
+     * @throws NullPointerException if the given charset is {@code null}
+     */
+    public synchronized void setCharset(@NonNull Charset charset) {
+        this.charset = charset;
+    }
+
+    /**
+     * Enables or disables indentation of the XML output. Has to be called before {@link #open(OutputStream)}.
+     *
+     * @param prettyPrint {@code true} to indent the XML output (default), {@code false} for a compact output
+     */
+    public synchronized void setPrettyPrint(boolean prettyPrint) {
+        this.prettyPrint = prettyPrint;
     }
 
     /**
@@ -177,28 +249,28 @@ public class StreamingMarshaller implements Closeable {
     @Override
     public synchronized void close() {
         try {
-            if (xmlWriter != null) {
-                xmlWriter.writeCharacters("\n");
-                xmlWriter.writeEndDocument();
-                xmlWriter.close();
+            if (this.xmlWriter != null) {
+                this.xmlWriter.writeCharacters("\n");
+                this.xmlWriter.writeEndDocument();
+                this.xmlWriter.close();
             }
         } catch (XMLStreamException e) {
             log.error("Unable to close XML stream writer", e);
         } finally {
-            xmlWriter = null;
+            this.xmlWriter = null;
             closeOutputStream();
         }
     }
 
     private void closeOutputStream() {
         try {
-            if (outputStream != null) {
-                outputStream.close();
+            if (this.outputStream != null) {
+                this.outputStream.close();
             }
         } catch (IOException e) {
             log.error("Unable to close underlying output stream", e);
         } finally {
-            outputStream = null;
+            this.outputStream = null;
         }
     }
 

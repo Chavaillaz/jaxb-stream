@@ -54,10 +54,10 @@ public class DiskMetric implements Metric {
      * @param diskPartition The partition folder
      */
     public DiskMetric(File diskPartition) {
-        disk = diskPartition.getPath();
-        totalCapacity = diskPartition.getTotalSpace();
-        freePartitionSpace = diskPartition.getFreeSpace();
-        usablePartitionSpace = diskPartition.getUsableSpace();
+        this.disk = diskPartition.getPath();
+        this.totalCapacity = diskPartition.getTotalSpace();
+        this.freePartitionSpace = diskPartition.getFreeSpace();
+        this.usablePartitionSpace = diskPartition.getUsableSpace();
     }
 
     /**

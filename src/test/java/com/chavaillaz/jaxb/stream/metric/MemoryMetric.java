@@ -38,9 +38,9 @@ public class MemoryMetric implements Metric {
      * Gets current metrics for the memory.
      */
     public MemoryMetric() {
-        freeMemory = getRuntime().freeMemory();
-        maxMemory = getRuntime().maxMemory();
-        totalMemory = getRuntime().totalMemory();
+        this.freeMemory = getRuntime().freeMemory();
+        this.maxMemory = getRuntime().maxMemory();
+        this.totalMemory = getRuntime().totalMemory();
     }
 
     @Override

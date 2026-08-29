@@ -35,9 +35,9 @@ class StreamingComplexStructureTest {
 
         @Override
         protected void createDocumentStart() throws XMLStreamException {
-            xmlWriter.writeStartDocument();
-            xmlWriter.writeStartElement("envelope");
-            xmlWriter.writeStartElement(rootElement);
+            this.xmlWriter.writeStartDocument();
+            this.xmlWriter.writeStartElement("envelope");
+            this.xmlWriter.writeStartElement(this.rootElement);
         }
 
     }

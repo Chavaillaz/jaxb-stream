@@ -30,6 +30,9 @@ import java.util.stream.StreamSupport;
 
 import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getAnnotation;
 import static com.chavaillaz.jaxb.stream.StreamingMarshaller.getNamespace;
+import static javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD;
+import static javax.xml.XMLConstants.ACCESS_EXTERNAL_STYLESHEET;
+import static javax.xml.XMLConstants.FEATURE_SECURE_PROCESSING;
 import static javax.xml.stream.XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES;
 import static javax.xml.stream.XMLInputFactory.SUPPORT_DTD;
 import static javax.xml.stream.XMLStreamConstants.*;
@@ -310,7 +313,14 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
         if (this.subtreeCopier == null) {
             try {
                 TransformerFactory factory = TransformerFactory.newInstance();
-                factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+                factory.setFeature(FEATURE_SECURE_PROCESSING, true);
+                // Deny all access to external references, as with the XMLInputFactory in open(). Not currently
+                // reachable in practice (the source is always a StAXSource wrapping the already-hardened
+                // xmlReader, which never survives a DOCTYPE past open() in the first place), but hardening the
+                // factory itself doesn't depend on that staying true and avoids flagging as an XXE risk by tools
+                // that can't verify it.
+                factory.setAttribute(ACCESS_EXTERNAL_DTD, "");
+                factory.setAttribute(ACCESS_EXTERNAL_STYLESHEET, "");
                 this.subtreeCopier = factory.newTransformer();
             } catch (TransformerConfigurationException e) {
                 throw new XMLStreamException("Unable to create the transformer used for resilient reading", e);

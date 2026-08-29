@@ -60,10 +60,31 @@ import static javax.xml.stream.XMLStreamConstants.*;
 @Slf4j
 public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
 
+    /**
+     * The unmarshaller created for each type already read, keyed by type, so it is only built once.
+     */
     private final Map<Class<?>, Unmarshaller> unmarshallerCache = new HashMap<>();
+
+    /**
+     * The type registered for each XML tag name given at instantiation, used by {@link #getNextType()}
+     * to resolve the type of the element the reader is currently positioned on.
+     */
     private final Map<String, Class<?>> mapType = new HashMap<>();
-    private @Nullable XMLStreamReader xmlReader;
-    private @Nullable InputStream inputStream;
+
+    /**
+     * The reader used to read the XML document, {@code null} until {@link #open(InputStream)} is called.
+     */
+    protected @Nullable XMLStreamReader xmlReader;
+
+    /**
+     * The input stream given to {@link #open(InputStream)}, {@code null} until then.
+     */
+    protected @Nullable InputStream inputStream;
+
+    /**
+     * The schema to validate elements against while unmarshalling them, set with {@link #setSchema(Schema)},
+     * or {@code null} to disable validation (default).
+     */
     private @Nullable Schema schema;
 
     /**

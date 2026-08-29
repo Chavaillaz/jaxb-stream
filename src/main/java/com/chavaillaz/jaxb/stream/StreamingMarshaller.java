@@ -55,6 +55,9 @@ import static org.codehaus.stax2.XMLOutputFactory2.P_AUTOMATIC_EMPTY_ELEMENTS;
 @Slf4j
 public class StreamingMarshaller implements Closeable {
 
+    /**
+     * The marshaller created for each type already written, keyed by type, so it is only built once.
+     */
     private final Map<Class<?>, Marshaller> marshallerCache = new HashMap<>();
 
     /**
@@ -72,8 +75,20 @@ public class StreamingMarshaller implements Closeable {
      */
     protected @Nullable OutputStream outputStream;
 
+    /**
+     * The charset used to write the XML output, set with {@link #setCharset(Charset)} (UTF-8 by default).
+     */
     private Charset charset = StandardCharsets.UTF_8;
+
+    /**
+     * Whether the XML output is indented, set with {@link #setPrettyPrint(boolean)} ({@code true} by default).
+     */
     private boolean prettyPrint = true;
+
+    /**
+     * The schema to validate elements against while marshalling them, set with {@link #setSchema(Schema)},
+     * or {@code null} to disable validation (default).
+     */
     private @Nullable Schema schema;
 
     /**

@@ -54,6 +54,28 @@ class StreamingComplexStructureTest {
 
     }
 
+    /**
+     * Reimplements {@link #skipDocumentStart(int)} using direct access to the protected {@code xmlReader}
+     * field, proving the unmarshaller's skip extension point is as capable as the marshaller's
+     * {@code createDocumentStart()}, which already relies on the protected {@code xmlWriter} field.
+     */
+    static class CustomSkipUnmarshaller extends StreamingUnmarshaller {
+
+        CustomSkipUnmarshaller(Map<Class<?>, String> types) {
+            super(types);
+        }
+
+        @Override
+        protected void skipDocumentStart(int skipDepth) throws XMLStreamException {
+            super.skipDocumentStart(skipDepth);
+            // Only possible because xmlReader is protected, like xmlWriter on StreamingMarshaller
+            if (this.xmlReader == null || !this.xmlReader.hasNext()) {
+                throw new XMLStreamException("Expected the reader to be usable after skipping the document start");
+            }
+        }
+
+    }
+
     private File file() {
         return tempDir.resolve(FILE_NAME).toFile();
     }
@@ -86,6 +108,23 @@ class StreamingComplexStructureTest {
         }
 
         assertThat(readMetrics).isEqualTo(writtenMetrics);
+    }
+
+    @Test
+    @DisplayName("skipDocumentStart() can use the protected xmlReader field directly, like createDocumentStart() can with xmlWriter")
+    void testSkipDocumentStartCanAccessXmlReaderDirectly() throws Exception {
+        MemoryMetric memory = new MemoryMetric();
+        try (NestedMarshaller marshaller = new NestedMarshaller("metrics")) {
+            marshaller.open(new FileOutputStream(file()));
+            marshaller.write(MemoryMetric.class, memory);
+        }
+
+        Map<Class<?>, String> types = Map.of(MemoryMetric.class, "memory");
+        try (CustomSkipUnmarshaller unmarshaller = new CustomSkipUnmarshaller(types)) {
+            unmarshaller.open(new FileInputStream(file()), 2);
+            assertThat(unmarshaller.hasNext()).isTrue();
+            assertThat(unmarshaller.next(MemoryMetric.class)).isEqualTo(memory);
+        }
     }
 
     @Test

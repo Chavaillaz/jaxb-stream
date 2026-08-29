@@ -6,6 +6,7 @@ import jakarta.xml.bind.Unmarshaller;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLInputFactory;
@@ -61,9 +62,9 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
 
     private final Map<Class<?>, Unmarshaller> unmarshallerCache = new HashMap<>();
     private final Map<String, Class<?>> mapType = new HashMap<>();
-    private XMLStreamReader xmlReader;
-    private InputStream inputStream;
-    private Schema schema;
+    private @Nullable XMLStreamReader xmlReader;
+    private @Nullable InputStream inputStream;
+    private @Nullable Schema schema;
 
     /**
      * Creates a new streaming unmarshaller reading elements from the given types.
@@ -114,7 +115,8 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
      *
      * @param inputStream The input stream in which read the XML elements
      * @param skipDepth   The number of container to skip before reaching the stream of desired elements
-     * @throws XMLStreamException if an error was encountered while creating the reader or while skipping tags
+     * @throws XMLStreamException if an error was encountered while creating the reader or while skipping tags,
+     *                            in which case this instance is left in the same not-open state as before this call
      */
     public synchronized void open(InputStream inputStream, int skipDepth) throws XMLStreamException {
         if (this.xmlReader != null) {
@@ -122,12 +124,34 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
         }
 
         this.inputStream = inputStream;
-        XMLInputFactory factory = XMLInputFactory.newInstance();
-        // Deny all access to external references
-        factory.setProperty(IS_SUPPORTING_EXTERNAL_ENTITIES, false);
-        factory.setProperty(SUPPORT_DTD, false);
-        this.xmlReader = factory.createXMLStreamReader(inputStream);
-        skipDocumentStart(skipDepth);
+        try {
+            XMLInputFactory factory = XMLInputFactory.newInstance();
+            // Deny all access to external references
+            factory.setProperty(IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+            factory.setProperty(SUPPORT_DTD, false);
+            this.xmlReader = factory.createXMLStreamReader(inputStream);
+            skipDocumentStart(skipDepth);
+        } catch (XMLStreamException e) {
+            closeAfterOpenFailure();
+            throw e;
+        }
+    }
+
+    /**
+     * Best-effort cleanup after {@link #open(InputStream, int)} failed partway through, so this instance is
+     * left in a clean not-open state instead of pretending to be open with a reader that never fully started.
+     */
+    private void closeAfterOpenFailure() {
+        try {
+            if (this.xmlReader != null) {
+                this.xmlReader.close();
+            }
+        } catch (XMLStreamException e) {
+            log.error("Unable to close XML stream reader after open() failed", e);
+        } finally {
+            this.xmlReader = null;
+            closeInputStream();
+        }
     }
 
     /**
@@ -174,7 +198,7 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
      *
      * @param schema The schema to validate against, or {@code null} to disable validation (default)
      */
-    public synchronized void setSchema(Schema schema) {
+    public synchronized void setSchema(@Nullable Schema schema) {
         this.schema = schema;
         this.unmarshallerCache.clear();
     }
@@ -235,15 +259,16 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
     /**
      * Reads the next element from the stream.
      *
-     * @param type The type of element to read
+     * @param type The type of element to read, or {@code null} (always treated as a mismatch, see below)
      * @param <T>  The element type
      * @return The element read from the stream
      * @throws IllegalStateException if the stream has not been opened yet
      * @throws XMLStreamException    if there's no more element to read
-     * @throws JAXBException         if there's a mismatch between the given type and the element type read
+     * @throws JAXBException         if there's a mismatch between the given type and the element type read,
+     *                               including when the given type is {@code null}
      * @throws JAXBException         if an error was encountered while unmarshalling the element
      */
-    public synchronized <T> T next(Class<T> type) throws JAXBException, XMLStreamException {
+    public synchronized <T> T next(@Nullable Class<T> type) throws JAXBException, XMLStreamException {
         Class<?> nextType = getNextType();
         if (type == null || !type.equals(nextType)) {
             throw new JAXBException("Mismatch between next type " + nextType + " and given type " + type);

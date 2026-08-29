@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.xml.stream.XMLStreamException;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FilterInputStream;
@@ -146,6 +147,53 @@ class StreamingTest {
         try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(Map.of())) {
             assertThrows(XMLStreamException.class, () -> unmarshaller.open(new ByteArrayInputStream(payload)));
         }
+    }
+
+    @Test
+    void testWriteBeforeOpenThrowsIllegalState() throws Exception {
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
+            assertThrows(IllegalStateException.class, () -> marshaller.write(MemoryMetric.class, new MemoryMetric()));
+        }
+    }
+
+    @Test
+    void testFailedOpenLeavesMarshallerNotOpen() throws Exception {
+        try (FailingMarshaller marshaller = new FailingMarshaller("metrics")) {
+            assertThrows(XMLStreamException.class, () -> marshaller.open(new ByteArrayOutputStream()));
+            // A failed open() must leave the instance in a clean not-open state, not a broken "open" one
+            assertThrows(IllegalStateException.class, () -> marshaller.write(MemoryMetric.class, new MemoryMetric()));
+        }
+    }
+
+    @Test
+    void testFailedOpenLeavesUnmarshallerNotOpen() throws Exception {
+        String maliciousXml = "<?xml version=\"1.0\"?>\n"
+                + "<!DOCTYPE metrics [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n"
+                + "<metrics>&xxe;</metrics>";
+        byte[] payload = maliciousXml.getBytes(StandardCharsets.UTF_8);
+
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(Map.of())) {
+            assertThrows(XMLStreamException.class, () -> unmarshaller.open(new ByteArrayInputStream(payload)));
+            // A failed open() must leave the instance in a clean not-open state, not a broken "open" one
+            assertThrows(IllegalStateException.class, unmarshaller::hasNext);
+        }
+    }
+
+    /**
+     * Always fails while creating the document start, to test the cleanup performed by {@link StreamingMarshaller}
+     * when {@link StreamingMarshaller#open(OutputStream)} fails partway through.
+     */
+    private static class FailingMarshaller extends StreamingMarshaller {
+
+        FailingMarshaller(String rootElement) {
+            super(rootElement);
+        }
+
+        @Override
+        protected void createDocumentStart() throws XMLStreamException {
+            throw new XMLStreamException("Simulated failure");
+        }
+
     }
 
     /**

@@ -10,6 +10,7 @@ import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.Nullable;
 
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLStreamException;
@@ -64,16 +65,16 @@ public class StreamingMarshaller implements Closeable {
     /**
      * The writer used to write the XML document, {@code null} until {@link #open(OutputStream)} is called.
      */
-    protected XMLStreamWriter xmlWriter;
+    protected @Nullable XMLStreamWriter xmlWriter;
 
     /**
      * The output stream given to {@link #open(OutputStream)}, {@code null} until then.
      */
-    protected OutputStream outputStream;
+    protected @Nullable OutputStream outputStream;
 
     private Charset charset = StandardCharsets.UTF_8;
     private boolean prettyPrint = true;
-    private Schema schema;
+    private @Nullable Schema schema;
 
     /**
      * Creates a new streaming marshaller writing elements in the given root element class.
@@ -122,7 +123,8 @@ public class StreamingMarshaller implements Closeable {
      * disabled with {@link #setPrettyPrint(boolean)}.
      *
      * @param outputStream The output stream in which write the XML elements
-     * @throws XMLStreamException if an error was encountered while starting the XML document with the root element
+     * @throws XMLStreamException if an error was encountered while starting the XML document with the root element,
+     *                             in which case this instance is left in the same not-open state as before this call
      */
     public synchronized void open(OutputStream outputStream) throws XMLStreamException {
         if (this.xmlWriter != null) {
@@ -130,11 +132,29 @@ public class StreamingMarshaller implements Closeable {
         }
 
         this.outputStream = outputStream;
-        WstxOutputFactory wstxOutputFactory = new WstxOutputFactory();
-        wstxOutputFactory.setProperty(P_AUTOMATIC_EMPTY_ELEMENTS, true);
-        XMLStreamWriter writer = wstxOutputFactory.createXMLStreamWriter(outputStream, this.charset.name());
-        this.xmlWriter = this.prettyPrint ? new IndentingXMLStreamWriter(writer) : writer;
-        createDocumentStart();
+        try {
+            WstxOutputFactory wstxOutputFactory = new WstxOutputFactory();
+            wstxOutputFactory.setProperty(P_AUTOMATIC_EMPTY_ELEMENTS, true);
+            XMLStreamWriter writer = wstxOutputFactory.createXMLStreamWriter(outputStream, this.charset.name());
+            this.xmlWriter = this.prettyPrint ? new IndentingXMLStreamWriter(writer) : writer;
+            createDocumentStart();
+        } catch (XMLStreamException e) {
+            closeAfterOpenFailure();
+            throw e;
+        }
+    }
+
+    /**
+     * Best-effort cleanup after {@link #open(OutputStream)} failed partway through, so this instance is
+     * left in a clean not-open state instead of pretending to be open with a writer that never fully started.
+     * Note that the writer itself is only dropped, not closed: {@link XMLStreamWriter#close()} would try to
+     * validate and finish a document that was never successfully started, failing with a confusing secondary
+     * exception (Woodstox refuses to close a document with no root element). Closing the underlying output
+     * stream directly is enough to release the actual resource.
+     */
+    private void closeAfterOpenFailure() {
+        this.xmlWriter = null;
+        closeOutputStream();
     }
 
     /**
@@ -156,6 +176,7 @@ public class StreamingMarshaller implements Closeable {
      * @param type   The type of the given {@code object}
      * @param object The element to marshal and write
      * @param <T>    The element type
+     * @throws IllegalStateException    if the stream has not been opened yet
      * @throws IllegalArgumentException if the {@link XmlRootElement} annotation is missing on the given type
      * @throws JAXBException            if an error was encountered while marshalling the given object
      */
@@ -171,9 +192,14 @@ public class StreamingMarshaller implements Closeable {
      * @param name   The tag name of the XML element described in {@link XmlRootElement} or {@link XmlElement}
      * @param object The element to marshal and write
      * @param <T>    The element type
-     * @throws JAXBException if an error was encountered while marshalling the given object
+     * @throws IllegalStateException if the stream has not been opened yet
+     * @throws JAXBException         if an error was encountered while marshalling the given object
      */
     public synchronized <T> void write(Class<T> type, String name, T object) throws JAXBException {
+        if (this.xmlWriter == null) {
+            throw new IllegalStateException("The stream has not been opened yet, please call open(OutputStream) first");
+        }
+
         JAXBElement<T> element = new JAXBElement<>(QName.valueOf(name), type, object);
         getMarshaller(type).marshal(element, this.xmlWriter);
     }
@@ -219,7 +245,7 @@ public class StreamingMarshaller implements Closeable {
      *
      * @param schema The schema to validate against, or {@code null} to disable validation (default)
      */
-    public synchronized void setSchema(Schema schema) {
+    public synchronized void setSchema(@Nullable Schema schema) {
         this.schema = schema;
         this.marshallerCache.clear();
     }

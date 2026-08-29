@@ -20,6 +20,11 @@ The dependency is available in maven central (see badge for version):
 </dependency>
 ```
 
+The library is annotated with [JSpecify](https://jspecify.dev) nullability annotations (the whole package is
+`@NullMarked`, meaning every parameter, return type and field is non-null unless explicitly marked `@Nullable`),
+so static analysis tools (IDE inspections, NullAway, the Checker Framework, ...) can catch null-safety issues
+in your code at build time.
+
 ## Usage
 
 You can find the following example in the ```StreamingTest``` class. Note that this library also works with JAXB classes

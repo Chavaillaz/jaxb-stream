@@ -38,6 +38,20 @@ class StreamingTest {
     }
 
     @Test
+    void testEmptyContainerRoundTrip() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
+            marshaller.open(output);
+            // No element written at all
+        }
+
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class)) {
+            unmarshaller.open(new ByteArrayInputStream(output.toByteArray()));
+            assertThat(unmarshaller.hasNext()).isFalse();
+        }
+    }
+
+    @Test
     void testInvalidTypeForNextElement() throws Exception {
         writeMetrics(FILE_NAME);
         try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(TYPES)) {
@@ -48,6 +62,35 @@ class StreamingTest {
                     unmarshaller.next(DiskMetric.class);
                 }
             });
+        }
+    }
+
+    @Test
+    void testTypeMismatchIsRecoverable() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        MemoryMetric memory = new MemoryMetric();
+        ProcessorMetric processor = new ProcessorMetric();
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
+            marshaller.open(output);
+            marshaller.write(MemoryMetric.class, memory);
+            marshaller.write(ProcessorMetric.class, processor);
+        }
+
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class, ProcessorMetric.class)) {
+            unmarshaller.open(new ByteArrayInputStream(output.toByteArray()));
+
+            // Deliberately ask for the wrong type first
+            assertThrows(JAXBException.class, () -> unmarshaller.next(ProcessorMetric.class));
+
+            // The mismatch must not have advanced (or otherwise broken) the stream position:
+            // the same element can still be read once asked for its actual type
+            assertThat(unmarshaller.getNextType()).isEqualTo(MemoryMetric.class);
+            assertThat(unmarshaller.next(MemoryMetric.class)).isEqualTo(memory);
+
+            // And reading can continue normally afterward
+            assertThat(unmarshaller.hasNext()).isTrue();
+            assertThat(unmarshaller.next(ProcessorMetric.class)).isEqualTo(processor);
+            assertThat(unmarshaller.hasNext()).isFalse();
         }
     }
 

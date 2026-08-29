@@ -6,8 +6,11 @@ import com.chavaillaz.jaxb.stream.metric.ProcessorMetric;
 import org.junit.jupiter.api.Test;
 
 import javax.xml.stream.XMLStreamException;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /**
  * Tests the extension points documented in the README for XML files with a more complex
  * structure, where the stream of elements to read/write is nested one level deeper than
- * the document root.
+ * the document root, as well as {@code skipDepth} edge values (zero, or deeper than the
+ * document actually is).
  */
 class StreamingComplexStructureTest {
 
@@ -82,6 +86,37 @@ class StreamingComplexStructureTest {
         try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(types)) {
             // Only the envelope is skipped, the metrics container is not
             unmarshaller.open(new FileInputStream(FILE_NAME), 1);
+            assertThrows(XMLStreamException.class, unmarshaller::getNextType);
+        }
+    }
+
+    @Test
+    void testExcessiveSkipDepthLeavesUnmarshallerNotOpen() throws Exception {
+        // Only 2 levels of nesting, no text content to trip nextTag() early -
+        // forces it to run past the actual end of the document
+        String xml = "<a><b><c/></b></a>";
+        byte[] payload = xml.getBytes(StandardCharsets.UTF_8);
+
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(Map.of())) {
+            assertThrows(XMLStreamException.class, () -> unmarshaller.open(new ByteArrayInputStream(payload), 10));
+            // A failed open() must leave the instance in a clean not-open state, not a broken "open" one
+            assertThrows(IllegalStateException.class, unmarshaller::hasNext);
+        }
+    }
+
+    @Test
+    void testSkipDepthZeroTreatsRootElementAsFirstItem() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (StreamingMarshaller marshaller = new StreamingMarshaller("metrics")) {
+            marshaller.open(output);
+            marshaller.write(MemoryMetric.class, new MemoryMetric());
+        }
+
+        try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class)) {
+            // With skipDepth 0, the container itself is never skipped, so the reader stays
+            // positioned on the root element ("metrics"), which is not a registered type
+            unmarshaller.open(new ByteArrayInputStream(output.toByteArray()), 0);
+            assertThat(unmarshaller.hasNext()).isTrue();
             assertThrows(XMLStreamException.class, unmarshaller::getNextType);
         }
     }

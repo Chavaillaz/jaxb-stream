@@ -154,6 +154,26 @@ try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric
 
 The same `setSchema` method is available on `StreamingMarshaller` to validate elements while writing them.
 
+### Resilient reading
+
+By default, an element that fails to unmarshal (invalid data, or data rejected by a schema given to
+`setSchema`) aborts the whole read. For large files where a few bad records shouldn't stop processing
+the rest, enable `setSkipInvalidElements` to skip them instead — this applies to `iterate`, `iterator`
+(and therefore for-each loops) and `stream`, but not to `next`, which always throws:
+
+```java
+try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(MemoryMetric.class, ProcessorMetric.class)) {
+    unmarshaller.setSchema(schema);
+    unmarshaller.setSkipInvalidElements(true);
+    unmarshaller.open(new FileInputStream(fileName));
+    // Elements that fail to unmarshal are logged at WARN level and skipped instead of aborting
+    unmarshaller.iterate((type, element) -> doSomething(element));
+}
+```
+
+Each element has to be buffered in memory before being unmarshalled so that a failure cannot corrupt the
+position of the underlying reader, which adds some overhead compared to the default behavior.
+
 ### Output configuration
 
 `StreamingMarshaller` writes indented UTF-8 XML by default. Both can be changed before calling `open`:

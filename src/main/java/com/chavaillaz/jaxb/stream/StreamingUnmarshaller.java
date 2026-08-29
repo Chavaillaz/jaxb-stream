@@ -8,10 +8,17 @@ import jakarta.xml.bind.annotation.XmlRootElement;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 
+import javax.xml.XMLConstants;
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.stax.StAXSource;
 import javax.xml.validation.Schema;
 import java.io.Closeable;
 import java.io.IOException;
@@ -86,6 +93,18 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
      * or {@code null} to disable validation (default).
      */
     private @Nullable Schema schema;
+
+    /**
+     * Whether {@link #iterate(BiConsumer)}, {@link #iterator()} and {@link #stream()} skip elements that fail
+     * to unmarshal instead of failing, set with {@link #setSkipInvalidElements(boolean)} ({@code false} by default).
+     */
+    private boolean skipInvalidElements = false;
+
+    /**
+     * Copies one element at a time out of {@link #xmlReader} in isolation, lazily created on first use by
+     * {@link #getSubtreeCopier()} when {@link #skipInvalidElements} is enabled.
+     */
+    private @Nullable Transformer subtreeCopier;
 
     /**
      * Creates a new streaming unmarshaller reading elements from the given types.
@@ -225,6 +244,76 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
     }
 
     /**
+     * Enables or disables skipping elements that fail to unmarshal (for example invalid data, or data
+     * rejected by the schema set with {@link #setSchema(Schema)}) instead of aborting the whole stream.
+     * Applies to {@link #iterate(BiConsumer)}, {@link #iterator()} and {@link #stream()} — not to
+     * {@link #next(Class)}, which always throws on failure regardless of this setting. Each skipped
+     * element is logged at {@code WARN} level with its type and the reason it failed.
+     * <p>
+     * When enabled, every element is first copied out of the stream in isolation before being unmarshalled,
+     * so that a failure cannot corrupt the position of the underlying reader; this adds some overhead
+     * compared to the default behavior, where elements are unmarshalled directly from the stream.
+     *
+     * @param skipInvalidElements {@code true} to skip invalid elements instead of failing, {@code false} by default
+     */
+    public synchronized void setSkipInvalidElements(boolean skipInvalidElements) {
+        this.skipInvalidElements = skipInvalidElements;
+    }
+
+    /**
+     * Reads the next element from the stream like {@link #next(Class)}, but isolates it from the underlying
+     * reader first (via an in-memory copy) so that if it fails to unmarshal, the failure cannot corrupt the
+     * reader's position: it is left ready for the next element regardless of whether this one was valid.
+     *
+     * @param type The type of the next element in the stream (as returned by {@link #getNextType()})
+     * @param <T>  The element type
+     * @return The element read, or empty if it failed to unmarshal (already logged at {@code WARN} level)
+     * @throws XMLStreamException if an error was encountered while isolating or skipping past the element
+     * @throws JAXBException      if an error was encountered while creating the unmarshaller for the type
+     */
+    private synchronized <T> Optional<T> readResilient(Class<T> type) throws XMLStreamException, JAXBException {
+        DOMResult buffer = new DOMResult();
+        try {
+            getSubtreeCopier().transform(new StAXSource(this.xmlReader), buffer);
+        } catch (TransformerException e) {
+            throw new XMLStreamException("Unable to isolate the next element for resilient reading", e);
+        }
+
+        Unmarshaller unmarshaller = getUnmarshaller(type);
+        try {
+            T value = unmarshaller.unmarshal(buffer.getNode(), type).getValue();
+            skipElements(CHARACTERS, END_ELEMENT);
+            return Optional.of(value);
+        } catch (JAXBException e) {
+            // getMessage() is often null for schema validation failures; the real detail is on the linked exception
+            Throwable cause = e.getLinkedException() != null ? e.getLinkedException() : e;
+            log.warn("Skipping element of type {} that failed to unmarshal: {}", type.getName(), cause.getMessage());
+            skipElements(CHARACTERS, END_ELEMENT);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Gets the transformer used by {@link #readResilient(Class)} to copy one element at a time out of the
+     * stream, creating and caching it on first use.
+     *
+     * @return The transformer to copy an element into an in-memory buffer
+     * @throws XMLStreamException if an error was encountered while creating the transformer
+     */
+    private Transformer getSubtreeCopier() throws XMLStreamException {
+        if (this.subtreeCopier == null) {
+            try {
+                TransformerFactory factory = TransformerFactory.newInstance();
+                factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+                this.subtreeCopier = factory.newTransformer();
+            } catch (TransformerConfigurationException e) {
+                throw new XMLStreamException("Unable to create the transformer used for resilient reading", e);
+            }
+        }
+        return this.subtreeCopier;
+    }
+
+    /**
      * Creates a new unmarshaller for the given type, applying the schema set with {@link #setSchema(Schema)} if any.
      *
      * @param type The type of elements the unmarshaller has to handle
@@ -317,7 +406,9 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
     }
 
     /**
-     * Iterates over all elements with the given consumer.
+     * Iterates over all elements with the given consumer. If {@link #setSkipInvalidElements(boolean)} is
+     * enabled, an element that fails to unmarshal is skipped (and not passed to the consumer) instead of
+     * aborting the iteration.
      *
      * @param consumer The consumer called for each element of the stream
      * @throws IllegalStateException if the stream has not been opened yet
@@ -327,7 +418,11 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
     public synchronized void iterate(BiConsumer<Class<?>, Object> consumer) throws JAXBException, XMLStreamException {
         while (hasNext()) {
             Class<?> type = getNextType();
-            consumer.accept(type, next(type));
+            if (this.skipInvalidElements) {
+                 readResilient(type).ifPresent(value -> consumer.accept(type, value));
+            } else {
+                consumer.accept(type, next(type));
+            }
         }
     }
 
@@ -335,6 +430,8 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
      * Returns an iterator over the remaining elements of the stream, allowing this unmarshaller to be used
      * in a for-each loop. Checked exceptions ({@link XMLStreamException}, {@link JAXBException}) raised while
      * reading are wrapped in an {@link UncheckedXmlException}, since {@link Iterator} methods cannot throw them.
+     * If {@link #setSkipInvalidElements(boolean)} is enabled, an element that fails to unmarshal is silently
+     * skipped in favor of the next one instead of failing {@link Iterator#next()}.
      *
      * @return An iterator unmarshalling one element per call to {@link Iterator#next()}
      */
@@ -353,15 +450,23 @@ public class StreamingUnmarshaller implements Closeable, Iterable<Object> {
 
             @Override
             public Object next() {
-                if (!hasNext()) {
-                    throw new NoSuchElementException();
+                while (hasNext()) {
+                    try {
+                        Class<?> type = getNextType();
+                        if (StreamingUnmarshaller.this.skipInvalidElements) {
+                            Optional<?> value = StreamingUnmarshaller.this.readResilient(type);
+                            if (value.isPresent()) {
+                                return value.get();
+                            }
+                            // Skipped: loop back around to try the next element instead
+                        } else {
+                            return StreamingUnmarshaller.this.next(type);
+                        }
+                    } catch (JAXBException | XMLStreamException e) {
+                        throw new UncheckedXmlException(e);
+                    }
                 }
-
-                try {
-                    return StreamingUnmarshaller.this.next(getNextType());
-                } catch (JAXBException | XMLStreamException e) {
-                    throw new UncheckedXmlException(e);
-                }
+                throw new NoSuchElementException();
             }
 
         };

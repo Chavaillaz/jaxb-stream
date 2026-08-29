@@ -175,6 +175,64 @@ class StreamingErgonomicsTest {
     }
 
     @Nested
+    @DisplayName("Resilient reading (skip invalid elements)")
+    class ResilientReading {
+
+        private static final String MIXED_VALIDITY_XML = "<metrics>"
+                + "<item><value>5</value></item>"
+                + "<item><value>-5</value></item>"
+                + "<item><value>7</value></item>"
+                + "</metrics>";
+
+        private Schema schema() throws Exception {
+            return SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
+                    .newSchema(new StreamSource(new StringReader(ITEM_XSD)));
+        }
+
+        @Test
+        @DisplayName("By default, an invalid element aborts iterate()")
+        void testIterateAbortsOnInvalidElementByDefault() throws Exception {
+            try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(Item.class)) {
+                unmarshaller.setSchema(schema());
+                unmarshaller.open(new ByteArrayInputStream(MIXED_VALIDITY_XML.getBytes(StandardCharsets.UTF_8)));
+                assertThrows(JAXBException.class, () -> unmarshaller.iterate((type, element) -> { }));
+            }
+        }
+
+        @Test
+        @DisplayName("setSkipInvalidElements(true) skips invalid elements in iterate() instead of aborting")
+        void testSkipInvalidElementsWithIterate() throws Exception {
+            List<Integer> values = new ArrayList<>();
+            try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(Item.class)) {
+                unmarshaller.setSchema(schema());
+                unmarshaller.setSkipInvalidElements(true);
+                unmarshaller.open(new ByteArrayInputStream(MIXED_VALIDITY_XML.getBytes(StandardCharsets.UTF_8)));
+                unmarshaller.iterate((type, element) -> values.add(((Item) element).value));
+            }
+
+            assertThat(values).containsExactly(5, 7);
+        }
+
+        @Test
+        @DisplayName("setSkipInvalidElements(true) skips invalid elements in stream() instead of aborting")
+        void testSkipInvalidElementsWithStream() throws Exception {
+            try (StreamingUnmarshaller unmarshaller = new StreamingUnmarshaller(Item.class)) {
+                unmarshaller.setSchema(schema());
+                unmarshaller.setSkipInvalidElements(true);
+                unmarshaller.open(new ByteArrayInputStream(MIXED_VALIDITY_XML.getBytes(StandardCharsets.UTF_8)));
+
+                List<Integer> values = unmarshaller.stream()
+                        .map(Item.class::cast)
+                        .map(item -> item.value)
+                        .toList();
+
+                assertThat(values).containsExactly(5, 7);
+            }
+        }
+
+    }
+
+    @Nested
     @DisplayName("Output configuration")
     class OutputConfiguration {
 
